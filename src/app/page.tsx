@@ -1,64 +1,62 @@
-import { ArrowDown, AudioLines, Boxes, ChartNoAxesCombined, NotebookText, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { ArrowDown, ArrowRight, ArrowUpRight, ChartNoAxesCombined, PackagePlus, ScrollText } from "lucide-react";
 import { SiteHeader } from "@/components/layout/site-header";
-import { StatusPill } from "@/components/ui/status-pill";
+import { SaathiCore } from "@/components/landing/saathi-core";
+import { LandingVoiceDemo } from "@/components/landing/voice-demo";
 
 const capabilities = [
-  { number: "01", title: "Inventory", description: "Understand stock through the words you already use.", icon: Boxes },
-  { number: "02", title: "Khata", description: "Bring customer balances into the conversation.", icon: NotebookText },
-  { number: "03", title: "Sales", description: "Make daily performance easier to ask about.", icon: ChartNoAxesCombined },
+  { number: "01", title: "Inventory in plain language", detail: "Describe a stock change as naturally as you would to a colleague. Saathi prepares the right structured action.", icon: PackagePlus },
+  { number: "02", title: "Khata with context", detail: "Ask about a customer by name, then see a clear result once a trusted ledger is connected.", icon: ScrollText },
+  { number: "03", title: "A clearer sales picture", detail: "Turn a question about the day into a useful summary, without digging through menus.", icon: ChartNoAxesCombined },
+];
+
+const steps = [
+  { number: "01", title: "Speak", detail: "Start with your own words." },
+  { number: "02", title: "Understand", detail: "AI prepares a structured intent." },
+  { number: "03", title: "Act", detail: "A trusted server tool validates the request." },
+  { number: "04", title: "Confirm", detail: "Only real tool results become confirmations." },
 ];
 
 export default function Home() {
   return (
-    <div id="top" className="page-shell">
-      <div className="page-frame">
-        <SiteHeader />
-        <main>
-          <section className="hero" aria-labelledby="hero-title">
-            <div className="hero-copy">
-              <div className="eyebrow"><span className="eyebrow-line" />Built for the rhythm of Indian retail</div>
-              <h1 id="hero-title">Your store,<br /><em>understood by voice.</em></h1>
-              <p className="hero-description">DukaanSaathi AI is a voice-first copilot designed to help Indian retailers manage inventory, khata, and sales in natural conversation.</p>
-              <a className="text-link" href="#focus">See what we&apos;re building <ArrowDown size={18} aria-hidden="true" /></a>
+    <div id="top" className="landing-page">
+      <div className="landing-frame"><SiteHeader /></div>
+      <main>
+        <section className="landing-hero landing-frame" aria-labelledby="landing-title">
+          <div className="landing-hero-copy">
+            <p className="landing-eyebrow"><span /> A new language for commerce</p>
+            <h1 id="landing-title">Your store,<br /><em>understood</em><br />by voice.</h1>
+            <p className="landing-hero-description">A multilingual AI copilot for Indian retailers to manage inventory, khata and sales through natural conversation.</p>
+            <div className="landing-hero-actions">
+              <Link className="button button-copper" href="/app/assistant">Explore the workspace <ArrowUpRight size={18} aria-hidden="true" /></Link>
+              <a className="landing-text-link" href="#voice-demo">See a voice example <ArrowDown size={17} aria-hidden="true" /></a>
             </div>
+            <p className="landing-proof"><span /> Offline mock experience · no Gnani credits used</p>
+          </div>
+          <SaathiCore />
+        </section>
 
-            <div className="preview" aria-label="Illustration of a future voice request moving through validation">
-              <div className="preview-topline">
-                <span>SAATHI / FOUNDATION</span>
-                <span className="preview-indicator"><span /> READY TO BUILD</span>
-              </div>
-              <div className="voice-symbol" aria-hidden="true"><AudioLines size={49} strokeWidth={1.25} /></div>
-              <p className="preview-label">A natural request</p>
-              <p className="preview-quote">“Maggi ke 20 packet add kar do”</p>
-              <div className="preview-divider" />
-              <div className="preview-result">
-                <span className="preview-result-icon"><ShieldCheck size={20} strokeWidth={1.7} aria-hidden="true" /></span>
-                <div><span>Structured intent</span><strong>inventory.adjust <span>·</span> +20 Maggi</strong></div>
-              </div>
-              <p className="preview-note">Illustrative mock output. No stock changes are made in Phase 1.</p>
-            </div>
-          </section>
+        <div className="landing-rule landing-frame"><span>DESIGNED FOR THE WAY STORES ACTUALLY WORK</span><span>VOICE → CONTEXT → CLARITY</span></div>
 
-          <section id="focus" className="focus-section" aria-labelledby="focus-title">
-            <div className="section-heading">
-              <div><p className="section-kicker">THE WORK AHEAD</p><h2 id="focus-title">One conversation. Clearer commerce.</h2></div>
-              <p>Designed around the everyday decisions behind a neighborhood store.</p>
-            </div>
-            <div className="capability-grid">
-              {capabilities.map(({ number, title, description, icon: Icon }) => (
-                <article className="capability" key={title}>
-                  <div className="capability-top"><span>{number} / 03</span><Icon size={23} strokeWidth={1.5} aria-hidden="true" /></div>
-                  <h3>{title}</h3><p>{description}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        </main>
-        <footer className="site-footer">
-          <span>Built with care for the stores that keep India moving.</span>
-          <StatusPill><span className="pill-dot" /> Mock AI mode — no Gnani credits used</StatusPill>
-        </footer>
-      </div>
+        <section id="possibilities" className="landing-capabilities landing-frame" aria-labelledby="possibilities-title">
+          <div className="landing-section-intro"><p className="landing-eyebrow">WHAT CAN DUKAANSAATHI DO?</p><h2 id="possibilities-title">Less navigation.<br /><em>More knowing.</em></h2><p>Built around everyday decisions at the counter, with the merchant in control of every action.</p></div>
+          <div className="capability-list">
+            {capabilities.map(({ number, title, detail, icon: Icon }) => <article key={number} className="capability-row"><span className="capability-number">{number}</span><span className="capability-icon"><Icon size={25} strokeWidth={1.45} aria-hidden="true" /></span><div><h3>{title}</h3><p>{detail}</p></div><ArrowUpRight size={19} strokeWidth={1.4} aria-hidden="true" /></article>)}
+          </div>
+        </section>
+
+        <section id="voice-demo" className="landing-demo-section" aria-labelledby="demo-title">
+          <div className="landing-frame landing-demo-grid">
+            <div className="landing-demo-intro"><p className="landing-eyebrow">A CONVERSATION, NOT A FORM</p><h2 id="demo-title">Ask the way<br />you <em>think.</em></h2><p>Hinglish is welcome here. Try a sample phrase and see how a future request becomes a structured action. This preview does not change store data.</p><Link className="landing-text-link dark" href="/app/assistant">Try the mock assistant <ArrowRight size={18} aria-hidden="true" /></Link></div>
+            <LandingVoiceDemo />
+          </div>
+        </section>
+
+        <section className="landing-workflow landing-frame" aria-labelledby="workflow-title"><div className="workflow-heading"><p className="landing-eyebrow">THE TRUSTED PATH</p><h2 id="workflow-title">From a word to a<br /><em>verified outcome.</em></h2><p>The model proposes. The server checks. The store stays in control.</p></div><div className="workflow-grid">{steps.map((step) => <div className="workflow-step" key={step.number}><span>{step.number}</span><h3>{step.title}</h3><p>{step.detail}</p></div>)}</div></section>
+
+        <section className="landing-final"><div className="landing-frame landing-final-inner"><div><p className="landing-eyebrow">BUILT FOR THE NEXT SHIFT</p><h2>A better store day<br />starts with <em>a sentence.</em></h2></div><div><p>Explore the first mock workspace. No account, live data, or paid AI service is needed.</p><Link className="button button-dark" href="/app/assistant">Enter DukaanSaathi <ArrowUpRight size={18} aria-hidden="true" /></Link></div></div></section>
+      </main>
+      <footer className="landing-footer landing-frame"><Link className="footer-brand" href="/">DukaanSaathi AI</Link><span>Built for the stores that keep India moving.</span><span>PHASE 2 / MOCK MODE</span></footer>
     </div>
   );
 }

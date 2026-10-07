@@ -31,7 +31,7 @@ export class MockAIProvider implements AIProvider {
 
     return reasoningResultSchema.parse({
       kind: "unsupported",
-      message: "This request is not available in the Phase 1 mock.",
+      message: "This request is not available in the current mock.",
     });
   }
 

@@ -1,8 +1,8 @@
-# Architecture — Phase 1
+# Architecture — Phase 2
 
 ## Scope
 
-The repository is a single Next.js App Router application. Phase 1 has a static product shell, typed AI boundaries, server tool contracts, and an offline mock. It has no database connection, live voice service, or business-tool implementation. This is intentionally sized for a small competition demo, likely fewer than 100 users.
+The repository is a single Next.js App Router application. Phase 2 adds a landing page, 3D Saathi Core, merchant workspace, and interactive assistant demo to the typed AI boundaries and offline mock. It has no database connection, live voice service, or business-tool implementation. This is intentionally sized for a small competition demo, likely fewer than 100 users.
 
 ## Intended flow
 
@@ -24,6 +24,8 @@ For voice, Gnani Prisma will eventually transcribe input. Gnani Evon will eventu
 
 The LLM suggests an intent and arguments; it does not mutate data. `toolCallSchema` validates the proposed intent and argument shape. `executeValidatedToolCall` passes only a validated call to a future trusted server executor. The executor must enforce identity, authorization, business rules, and database transactions. Its database result is authoritative. The assistant may claim success **only after** a successful tool result. A failed or unimplemented tool must never be described as complete.
 
+The Phase 2 assistant posts text to `/api/mock/reason`. That server route validates the request and runs `MockAIProvider`; it returns a proposed action and mock response without executing a business tool. The UI labels inventory changes and balance lookups as previews. The microphone control cycles through visual voice states and selects a demo phrase; it does not record audio.
+
 Initial contracts cover `inventory.adjust`, `inventory.getStock`, `khata.getBalance`, `khata.addEntry`, and `sales.getDailySummary`. They define the input boundary, not production behavior or fake stored records.
 
 ## Environment
@@ -36,12 +38,15 @@ Deterministic offline behavior protects the 5,000 programme credits and lets the
 
 ## Directory map
 
-- `src/app`: routes, global styles, metadata.
-- `src/components`: small shared layout and UI components.
+- `src/app`: landing, workspace and mock API routes, styles, metadata.
+- `src/components`: shared layout, landing, assistant, and UI components.
+- `src/features/assistant`: reusable voice states and mock response copy.
 - `src/lib/ai`: provider interface, schema, mock implementation, factory.
 - `src/lib/env`: provider configuration parsing.
 - `src/lib/utils`: reusable UI utility.
 - `src/server/tools`: trusted tool execution contracts.
 - `tests`: deterministic contract and mock checks.
 
-Future feature folders (`assistant`, `inventory`, `khata`, `sales`) and a data module should be created when their first real implementation lands; empty folders are avoided.
+Future feature folders for inventory, khata, sales, and orders and a data module should be created when their first implementation lands; empty folders are avoided.
+
+The Saathi Core is loaded dynamically on capable desktop browsers. Mobile, reduced-motion, and WebGL-unavailable contexts use a CSS fallback with the same product concepts. No external 3D assets or textures are downloaded.

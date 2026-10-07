@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./landing.css";
+import "./workspace.css";
 
 export const metadata: Metadata = {
   title: "DukaanSaathi AI — Your store, understood by voice",
-  description: "A voice-first AI copilot for Indian kirana stores and small retailers. Phase 1 foundation runs in offline mock mode.",
+  description: "A multilingual AI copilot for Indian retailers to manage inventory, khata and sales through natural conversation. Explore the offline mock experience.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
