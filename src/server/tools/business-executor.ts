@@ -1,8 +1,9 @@
 import { khataBalance, rupees } from "../../lib/business/calculations";
 import type { ToolCall } from "../../lib/ai/types/tool-call";
 import type { TrustedToolExecutor, ToolExecutionResult } from "./contracts";
+import { matchShoppingList, type CatalogProduct } from "../../lib/assistant/match-shopping-list";
 
-export type ProductRecord = { id: string; name: string; currentStock: number };
+export type ProductRecord = CatalogProduct;
 export type CustomerRecord = { id: string; name: string };
 export type LedgerRecord = { type: "gave" | "received"; amount: number };
 
@@ -10,9 +11,12 @@ export interface BusinessRepository {
   products(): Promise<ProductRecord[]>;
   adjustStock(productId: string, delta: number): Promise<number>;
   customers(): Promise<CustomerRecord[]>;
+  createCustomer(name: string): Promise<string>;
+  openAccount(name: string, amount: number): Promise<string>;
   ledger(customerId: string): Promise<LedgerRecord[]>;
-  addEntry(customerId: string, amount: number, note?: string): Promise<void>;
+  addEntry(customerId: string, type: "gave" | "received", amount: number, note?: string): Promise<void>;
   dailySales(date: string): Promise<{ total: number; count: number }>;
+  recordSale(items: { productId: string; quantity: number }[], paymentMethod: "cash" | "upi" | "card"): Promise<{ saleId: string; total: number }>;
 }
 
 function matchByName<T extends { name: string }>(records: T[], rawName: string): T | null {
@@ -42,6 +46,22 @@ export class BusinessToolExecutor implements TrustedToolExecutor {
           if (!product) return { ok: false, error: "Product not found." };
           return { ok: true, data: { intent: call.intent, product: product.name, stock: product.currentStock } };
         }
+        case "inventory.checkList": {
+          const draft = matchShoppingList(call.arguments.items, await this.repository.products());
+          return { ok: true, data: { intent: call.intent, draft } };
+        }
+        case "customer.create": {
+          const existing = matchByName(await this.repository.customers(), call.arguments.customer);
+          if (existing) return { ok: false, error: "A customer with that name already exists." };
+          const id = await this.repository.createCustomer(call.arguments.customer);
+          return { ok: true, data: { intent: call.intent, customer: call.arguments.customer, id } };
+        }
+        case "khata.openAccount": {
+          const existing = matchByName(await this.repository.customers(), call.arguments.customer);
+          if (existing) return { ok: false, error: "A customer with that name already exists." };
+          const id = await this.repository.openAccount(call.arguments.customer, call.arguments.amountRupees);
+          return { ok: true, data: { intent: call.intent, customer: call.arguments.customer, id, balance: call.arguments.amountRupees } };
+        }
         case "khata.getBalance": {
           const customer = matchByName(await this.repository.customers(), call.arguments.customer);
           if (!customer) return { ok: false, error: "Customer not found." };
@@ -51,9 +71,16 @@ export class BusinessToolExecutor implements TrustedToolExecutor {
         case "khata.addEntry": {
           const customer = matchByName(await this.repository.customers(), call.arguments.customer);
           if (!customer) return { ok: false, error: "Customer not found." };
-          await this.repository.addEntry(customer.id, call.arguments.amountRupees, call.arguments.note);
+          await this.repository.addEntry(customer.id, call.arguments.type, call.arguments.amountRupees, call.arguments.note);
           const balance = khataBalance(await this.repository.ledger(customer.id));
-          return { ok: true, data: { intent: call.intent, customer: customer.name, amount: call.arguments.amountRupees, balance } };
+          return { ok: true, data: { intent: call.intent, customer: customer.name, type: call.arguments.type, amount: call.arguments.amountRupees, balance } };
+        }
+        case "sales.recordConfirmedBasket": {
+          if (new Set(call.arguments.items.map((item) => item.productId)).size !== call.arguments.items.length) {
+            return { ok: false, error: "The basket repeats a product." };
+          }
+          const sale = await this.repository.recordSale(call.arguments.items, call.arguments.paymentMethod);
+          return { ok: true, data: { intent: call.intent, ...sale } };
         }
         case "sales.getDailySummary": {
           const summary = await this.repository.dailySales(call.arguments.date);
@@ -68,10 +95,26 @@ export class BusinessToolExecutor implements TrustedToolExecutor {
 
 export function describeToolResult(result: ToolExecutionResult): { title: string; detail: string; reply: string } {
   if (!result.ok) {
+    if (result.error.startsWith("Sale may have been saved.")) {
+      return { title: "Sale needs verification", detail: result.error, reply: result.error };
+    }
     return { title: "Action not completed", detail: result.error, reply: `I could not complete that request: ${result.error}` };
   }
   const data = result.data as Record<string, unknown>;
   switch (data.intent) {
+    case "inventory.checkList": {
+      const draft = data.draft as { items: { status: string }[]; estimatedTotal: number; canConfirm: boolean };
+      const available = draft.items.filter((item) => item.status === "available").length;
+      return { title: "Shopping list draft", detail: `${available} of ${draft.items.length} items available · ${rupees(draft.estimatedTotal)} estimated`, reply: draft.canConfirm
+        ? `I checked the list against your store. All ${draft.items.length} items are available. Review the draft and confirm before any sale is recorded.`
+        : `I checked the list against your store. ${available} of ${draft.items.length} items are available; missing or short-stock items must be resolved before a sale. Nothing was changed.` };
+    }
+    case "customer.create":
+      return { title: "Customer added", detail: String(data.customer), reply: `${data.customer} was added as a customer. No opening udhaar was recorded.` };
+    case "khata.openAccount":
+      return { title: "Khata opened", detail: `${data.customer} · ${rupees(Number(data.balance))} outstanding`, reply: `${data.customer}'s new khata was opened with ${rupees(Number(data.balance))} outstanding.` };
+    case "sales.recordConfirmedBasket":
+      return { title: "Sale recorded", detail: `${rupees(Number(data.total))} · confirmed by store`, reply: `Sale recorded for ${rupees(Number(data.total))}. Stock was reduced in the same database transaction.` };
     case "inventory.adjust":
       return { title: "Stock updated", detail: `${data.product} · ${data.newStock} in stock`, reply: `Done. ${data.product} stock is now ${data.newStock} after a ${Number(data.delta) > 0 ? "+" : ""}${data.delta} adjustment.` };
     case "inventory.getStock":
@@ -79,7 +122,7 @@ export function describeToolResult(result: ToolExecutionResult): { title: string
     case "khata.getBalance":
       return { title: "Balance checked", detail: `${data.customer} · ${rupees(Number(data.balance))} outstanding`, reply: `${data.customer}'s outstanding balance is ${rupees(Number(data.balance))}.` };
     case "khata.addEntry":
-      return { title: "Khata entry saved", detail: `${data.customer} · ${rupees(Number(data.balance))} outstanding`, reply: `The ${rupees(Number(data.amount))} entry was saved. ${data.customer}'s outstanding balance is now ${rupees(Number(data.balance))}.` };
+      return { title: data.type === "received" ? "Payment recorded" : "Udhaar recorded", detail: `${data.customer} · ${rupees(Number(data.balance))} outstanding`, reply: `${data.type === "received" ? "Payment of" : "New udhaar of"} ${rupees(Number(data.amount))} was recorded. ${data.customer}'s outstanding balance is now ${rupees(Number(data.balance))}.` };
     case "sales.getDailySummary":
       return { title: "Sales summary", detail: `${data.date} · ${rupees(Number(data.total))}`, reply: `Sales on ${data.date} total ${rupees(Number(data.total))} across ${data.count} sale(s).` };
     default:

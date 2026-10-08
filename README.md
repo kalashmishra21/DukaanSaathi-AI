@@ -4,7 +4,7 @@ A voice-first AI copilot for Indian kirana stores and small retailers, built for
 
 ## Current scope
 
-The landing page, Saathi Core, and assistant work with `AI_PROVIDER=mock` and `AI_REASONER=mock` without AI service calls. With Supabase configured, a signed-in shop owner can manage inventory, khata, sales, and a database-derived overview. The assistant sends validated intents to trusted server tools. Optional `AI_PROVIDER=gnani` adds real Prisma STT and Timbre TTS; optional `AI_REASONER=openrouter` replaces deterministic intent selection with a free model on OpenRouter. **Evon inference is not connected.** Neither model output nor browser code can write store data directly.
+The landing page, Saathi Core, and assistant work with `AI_PROVIDER=mock` and `AI_REASONER=mock` without AI service calls. With Supabase configured, a signed-in shop owner can manage inventory, khata, sales, and a database-derived overview. The assistant can add customers, open a khata with an atomic opening entry, record payments, and check a shopping list against real stock and prices. A shopping-list result is a draft; only the separate **Confirm & record sale** action can create a sale. Optional `AI_PROVIDER=gnani` adds real Prisma STT and Timbre TTS; optional `AI_REASONER=openrouter` replaces deterministic intent selection with a free model on OpenRouter. **Evon inference is not connected.** Neither model output nor browser code can write store data directly.
 
 ## Local setup
 
@@ -13,7 +13,7 @@ Requires Node.js 20.9+ and npm. Run `npm install`, then `npm run dev`. The app u
 For real store data:
 
 1. Create a Supabase project. Copy its project URL and **public anon/publishable key** into a local `.env.local` using the names in [`.env.example`](.env.example). Never use a service-role key in the browser or commit credentials.
-2. Run [the initial SQL migration](supabase/migrations/20261007000100_initial_business.sql), [the hardening migration](supabase/migrations/20261008071313_hardening_indexes.sql), and [the demo reset migration](supabase/migrations/20261008090000_demo_shop_reset.sql), in that order in the Supabase SQL Editor. Already applied migrations must not be rerun. These provide RLS, atomic business functions, richer demo records, and an owner-scoped reset.
+2. Run [the initial SQL migration](supabase/migrations/20261007000100_initial_business.sql), [the hardening migration](supabase/migrations/20261008071313_hardening_indexes.sql), [the demo reset migration](supabase/migrations/20261008090000_demo_shop_reset.sql), and [the assistant khata migration](supabase/migrations/20261008160000_assistant_open_khata.sql), in that order in the Supabase SQL Editor. Already applied migrations must not be rerun. These provide RLS, atomic business functions, richer demo records, an owner-scoped reset, and atomic new khata opening.
 3. In Supabase Authentication URL settings, set the site URL to `http://localhost:3100` and allow `http://localhost:3100/auth/callback` as a redirect URL. Enable email/password sign-in. A hosted project may require email confirmation before first sign-in.
 4. Start or restart the app, create an account or sign in at `/signin`, then choose **Create demo shop** in the workspace. The overview offers **Reset demo shop** for the signed-in owner. Reset removes that demo shop's current records and creates fresh synthetic samples atomically.
 
@@ -26,6 +26,11 @@ Keep `AI_PROVIDER=mock` during normal development. To enable paid voice requests
 ## Optional OpenRouter reasoning
 
 Set `AI_REASONER=openrouter`, `OPENROUTER_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free`, and a private `OPENROUTER_API_KEY` in `.env.local`, then restart. `AI_PROVIDER` independently controls voice. The free route can be rate limited or return no tool call; those cases fail closed, without a database mutation. `AI_REASONER=mock` restores the deterministic offline reasoner. The [Phase 5 benchmark](docs/reasoner-benchmark.md) records the model selection and its limits.
+Exact supported merchant commands use a deterministic fast path before the OpenRouter request, so common stock, khata, sales and text-list phrases stay responsive when the free provider is busy. Other requests still use OpenRouter; there is no fallback after a failed model response.
+
+Shopping-list photos use a configurable free vision model through the same private server-side OpenRouter key (`OPENROUTER_VISION_MODEL`). JPG, PNG, WebP and PDFs are accepted up to 5 MB; PDFs are limited to three pages. Text PDF extraction and scanned-page rendering run in the browser with PDF.js; images are sent to the vision provider temporarily. DukaanSaathi does not store uploaded files. Free provider availability varies, so a failed extraction shows an error and makes no sale. Check every extracted item before confirming.
+
+The [Phase 6 vision check](docs/vision-benchmark.md) records the synthetic comparison and why the current free model is only a best available option.
 
 ## Checks
 

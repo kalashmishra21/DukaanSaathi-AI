@@ -22,6 +22,33 @@ describe("MockAIProvider", () => {
     });
   });
 
+  it("opens Nandini's khata directly and via a safe amount clarification", async () => {
+    await expect(provider.reason({ text: "Nandini ke naam se 100 rupaye ka naya udhaar khata bana do" })).resolves.toMatchObject({
+      kind: "tool_call", tool: { intent: "khata.openAccount", arguments: { customer: "Nandini", amountRupees: 100 } },
+    });
+    const first = await provider.reason({ text: "Nandini naam se customer add karo udhaar wala" });
+    expect(first).toMatchObject({ kind: "clarify", pending: { customer: "Nandini" } });
+    if (first.kind !== "clarify") throw new Error("Expected clarification");
+    await expect(provider.reason({ text: "100 rupaye", pending: first.pending })).resolves.toMatchObject({
+      kind: "tool_call", tool: { intent: "khata.openAccount", arguments: { customer: "Nandini", amountRupees: 100 } },
+    });
+    await expect(provider.reason({ text: "kal aana", pending: first.pending })).resolves.toMatchObject({ kind: "unsupported" });
+  });
+
+  it("uses a received ledger entry for Nandini's repayment", async () => {
+    await expect(provider.reason({ text: "Nandini ne 50 rupaye wapas diye" })).resolves.toMatchObject({
+      kind: "tool_call", tool: { intent: "khata.addEntry", arguments: { customer: "Nandini", type: "received", amountRupees: 50 } },
+    });
+  });
+
+  it("turns a text shopping list into a read-only batch inventory check", async () => {
+    await expect(provider.reason({ text: "Shopping list: Maggi 2, Parle-G 3" })).resolves.toMatchObject({
+      kind: "tool_call", tool: { intent: "inventory.checkList", arguments: { items: [
+        { product: "Maggi", quantity: 2 }, { product: "Parle-G", quantity: 3 },
+      ] } },
+    });
+  });
+
   it("handles supported Hindi transcripts after Prisma transcription", async () => {
     await expect(provider.reason({ text: "मैगी के २० पैकेट जोड़ कर दो।" })).resolves.toEqual({
       kind: "tool_call", tool: { intent: "inventory.adjust", arguments: { product: "Maggi", delta: 20 } },

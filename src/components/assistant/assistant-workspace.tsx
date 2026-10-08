@@ -1,25 +1,33 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUp, AudioLines, CornerDownRight, Mic, RotateCcw, ShieldCheck, Square } from "lucide-react";
+import { ArrowUp, AudioLines, Camera, FileText, Mic, Paperclip, RotateCcw, ShieldCheck, Square, X } from "lucide-react";
 import { z } from "zod";
 import { assistantResponseSchema, type AssistantResponse } from "@/lib/business/assistant-response";
+import { pendingClarificationSchema, type recentTurnSchema } from "@/lib/ai/types/tool-call";
+import type { ShoppingDraft } from "@/lib/assistant/shopping-list";
+import { prepareShoppingAttachment } from "@/lib/assistant/read-attachment";
 import { startVoiceRecording, type VoiceRecording } from "@/lib/ai/capture";
 import type { VoiceState } from "@/features/assistant/voice-states";
 import { VoiceStateIndicator } from "./voice-state-indicator";
+import { ShoppingListResult } from "./shopping-list-result";
 
-type Message = { id: number; role: "user" | "assistant"; text: string };
+type AttachmentPreview = { name: string; kind: "image" | "pdf"; url: string };
+type Message = { id: number; role: "user" | "assistant"; text: string; attachment?: AttachmentPreview; result?: AssistantResponse };
 type ProviderMode = "mock" | "gnani";
 type ReasonerMode = "mock" | "openrouter";
+type RecentTurn = z.infer<typeof recentTurnSchema>;
 
 const examples = [
   "Maggi ke 20 packet add kar do",
-  "Sharma ji ka kitna udhaar hai?",
+  "Nandini ke naam se 100 rupaye ka naya udhaar khata bana do",
+  "Nandini ne 50 rupaye wapas diye",
   "Aaj ki sale batao",
-  "Sharma ji ko 100 rupaye udhaar likh do",
 ];
 const transcriptSchema = z.object({ text: z.string().trim().min(1), language: z.string().optional() });
+const errorSchema = z.object({ error: z.string().min(1).max(250) });
 const pause = (duration: number) => new Promise((resolve) => setTimeout(resolve, duration));
 
 export function AssistantWorkspace({ connected, providerMode, reasonerMode, voiceAvailable }: {
@@ -29,64 +37,96 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   const recording = useRef<VoiceRecording | null>(null);
   const recordingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const player = useRef<HTMLAudioElement | null>(null);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const cameraInput = useRef<HTMLInputElement | null>(null);
+  const objectUrls = useRef<string[]>([]);
+  const nextId = useRef(1);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<Message[]>([{ id: 0, role: "assistant", text: connected ? "Namaste. Ask about stock, khata or sales. Business results come from your store database." : "Namaste. I can preview a stock adjustment or khata request. Connect a shop to save business actions." }]);
+  const [attachment, setAttachment] = useState<{ file: File; preview: AttachmentPreview } | null>(null);
+  const [messages, setMessages] = useState<Message[]>([{ id: 0, role: "assistant", text: connected
+    ? "Namaste. Ask about stock, khata, sales or a shopping list. I confirm changes only after your store does."
+    : "Namaste. Connect a shop to work with real inventory, khata and sales records." }]);
+  const [pending, setPending] = useState<z.infer<typeof pendingClarificationSchema> | null>(null);
+  const [inactiveDrafts, setInactiveDrafts] = useState<number[]>([]);
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceLanguage, setVoiceLanguage] = useState<"hi-IN" | "en-IN">("hi-IN");
   const [voiceNotice, setVoiceNotice] = useState("");
   const [speechUrl, setSpeechUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [lastPrompt, setLastPrompt] = useState("");
+  const [retryable, setRetryable] = useState(false);
   const [action, setAction] = useState<AssistantResponse | null>(null);
 
   useEffect(() => () => {
     if (recordingTimer.current) clearTimeout(recordingTimer.current);
     void recording.current?.cancel();
     player.current?.pause();
+    objectUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
+
+  function addMessage(message: Omit<Message, "id">): number {
+    const id = nextId.current++;
+    setMessages((current) => [...current, { id, ...message }]);
+    return id;
+  }
+
+  function recentTurns(): RecentTurn[] {
+    return messages.slice(-6).map((message) => ({ role: message.role, text: message.text.slice(0, 500) }));
+  }
+
+  async function readTurn(response: Response): Promise<AssistantResponse> {
+    const raw: unknown = await response.json();
+    const parsed = assistantResponseSchema.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    const safeError = errorSchema.safeParse(raw);
+    throw new Error(response.status === 401 ? "Sign in again to continue." : safeError.success
+      ? safeError.data.error : "The result could not be verified. Check store records before retrying.");
+  }
+
+  async function showTurn(turn: AssistantResponse) {
+    setAction(turn);
+    setPending(turn.pending ?? null);
+    addMessage({ role: "assistant", text: turn.reply, result: turn });
+    if (turn.state === "confirmed") router.refresh();
+    if (turn.speech) {
+      const url = `data:${turn.speech.mimeType};base64,${turn.speech.data}`;
+      setSpeechUrl(url);
+      setVoiceState("speaking");
+      const audio = new Audio(url);
+      player.current = audio;
+      audio.onended = () => setVoiceState(turn.state === "failed" ? "error" : "idle");
+      await audio.play().catch(() => setVoiceNotice("Tap the audio player to hear the reply."));
+    } else {
+      if (turn.speechUnavailable) setVoiceNotice("Spoken reply is unavailable. The store result is shown in text.");
+      setVoiceState(turn.state === "failed" ? "error" : "idle");
+    }
+  }
 
   async function processPrompt(text: string, speak: boolean) {
     setBusy(true);
     setLastPrompt(text);
+    setRetryable(false);
     setInput("");
     setAction(null);
     setSpeechUrl("");
     setVoiceNotice("");
     player.current?.pause();
-
+    const recent = recentTurns();
+    addMessage({ role: "user", text });
     try {
-      setMessages((current) => [...current, { id: Date.now(), role: "user", text }]);
       setVoiceState("reasoning");
       const response = await fetch("/api/assistant/turn", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, speak }),
+        body: JSON.stringify({ text, speak, recent, pending }),
       });
-      const body: unknown = await response.json();
-      const parsed = assistantResponseSchema.safeParse(body);
-      if (!parsed.success) {
-        const safeError = z.object({ error: z.string().min(1).max(200) }).safeParse(body);
-        throw new Error(response.status === 401 ? "Sign in again to continue." : safeError.success ? safeError.data.error : "The store request could not be processed. No change was confirmed.");
-      }
-      const turn = parsed.data;
+      const turn = await readTurn(response);
       setVoiceState("executing");
-      setAction(turn);
-      setMessages((current) => [...current, { id: Date.now() + 1, role: "assistant", text: turn.reply }]);
-      if (turn.state === "confirmed") router.refresh();
-      if (turn.speech) {
-        const url = `data:${turn.speech.mimeType};base64,${turn.speech.data}`;
-        setSpeechUrl(url);
-        setVoiceState("speaking");
-        const audio = new Audio(url);
-        player.current = audio;
-        audio.onended = () => setVoiceState(turn.state === "failed" ? "error" : "idle");
-        await audio.play().catch(() => setVoiceNotice("Tap the audio player to hear the reply."));
-      } else {
-        if (turn.speechUnavailable) setVoiceNotice("Spoken reply is unavailable. The store result is shown in text.");
-        setVoiceState(turn.state === "failed" ? "error" : "idle");
-      }
+      await showTurn(turn);
     } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "The request could not be verified. Check store records before retrying.";
       setVoiceState("error");
-      setMessages((current) => [...current, { id: Date.now() + 2, role: "assistant", text: reason instanceof Error ? reason.message : "The request could not be processed. Nothing was confirmed." }]);
+      setRetryable(message.includes("Nothing was changed"));
+      addMessage({ role: "assistant", text: message });
     } finally {
       setBusy(false);
     }
@@ -97,11 +137,70 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
     if (!text || busy || voiceState === "listening") return;
     if (sampleVoice) {
       setVoiceState("listening");
-      await pause(450);
+      await pause(350);
       setVoiceState("transcribing");
-      await pause(450);
+      await pause(350);
     }
     await processPrompt(text, false);
+  }
+
+  async function processAttachment() {
+    if (!attachment || busy) return;
+    setBusy(true);
+    setAction(null);
+    setVoiceNotice("");
+    setRetryable(false);
+    const selected = attachment;
+    setAttachment(null);
+    addMessage({ role: "user", text: input.trim() || `Check this shopping list: ${selected.file.name}`, attachment: selected.preview });
+    setInput("");
+    try {
+      setVoiceState("reasoning");
+      const prepared = await prepareShoppingAttachment(selected.file);
+      const form = new FormData();
+      form.set("extractedText", prepared.extractedText);
+      prepared.images.forEach((image) => form.append("images", image));
+      const response = await fetch("/api/assistant/attachment", { method: "POST", body: form });
+      await showTurn(await readTurn(response));
+    } catch (reason) {
+      setVoiceState("error");
+      addMessage({ role: "assistant", text: reason instanceof Error ? reason.message : "The attachment could not be checked. No stock was changed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmSale(draft: ShoppingDraft, paymentMethod: "cash" | "upi" | "card", draftMessageId: number) {
+    if (busy || !draft.canConfirm || inactiveDrafts.includes(draftMessageId)) return;
+    setBusy(true);
+    setInactiveDrafts((current) => [...current, draftMessageId]);
+    addMessage({ role: "user", text: `Confirm and record this basket · ${paymentMethod.toUpperCase()}` });
+    try {
+      const items = draft.items.map((item) => ({ productId: z.uuid().parse(item.productId), quantity: item.quantity }));
+      const response = await fetch("/api/assistant/confirm-sale", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmed: true, items, paymentMethod }),
+      });
+      await showTurn(await readTurn(response));
+    } catch (reason) {
+      setVoiceState("error");
+      addMessage({ role: "assistant", text: reason instanceof Error ? reason.message : "Sale confirmation was not verified. Check Sales before trying again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function chooseFile(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 5_000_000 || file.size === 0 || !["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(file.type)) {
+      setVoiceNotice("Choose a JPG, PNG, WebP or PDF file under 5 MB.");
+      return;
+    }
+    if (attachment) URL.revokeObjectURL(attachment.preview.url);
+    const url = URL.createObjectURL(file);
+    objectUrls.current.push(url);
+    setAttachment({ file, preview: { name: file.name, kind: file.type === "application/pdf" ? "pdf" : "image", url } });
+    setVoiceNotice("");
   }
 
   async function stopRecording() {
@@ -134,9 +233,6 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
     if (recording.current) { await stopRecording(); return; }
     if (busy || !voiceAvailable) return;
     setVoiceNotice("");
-    setLastPrompt("");
-    setSpeechUrl("");
-    player.current?.pause();
     try {
       recording.current = await startVoiceRecording();
       setVoiceState("listening");
@@ -149,27 +245,46 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void runPrompt(input);
+    if (attachment) void processAttachment();
+    else void runPrompt(input);
   }
 
   const realVoice = providerMode === "gnani";
   const realReasoning = reasonerMode === "openrouter";
-  return (
-    <div className="assistant-page">
-      <div className="assistant-heading"><div><p className="workspace-eyebrow">ASSISTANT / COMMAND CENTER</p><h1>Ask Saathi.</h1><p>{realVoice ? `Prisma hears your voice. ${realReasoning ? "OpenRouter" : "Mock reasoning"} selects an intent. Trusted tools confirm store changes before Timbre speaks.` : `${realReasoning ? "OpenRouter" : "Mock AI"} interprets your words. Trusted tools confirm changes only after the database succeeds.`}</p></div><span className="assistant-mode-badge"><span /> {realVoice ? `GNANI VOICE · ${realReasoning ? "OPENROUTER" : "MOCK INTENT"}` : connected ? `${realReasoning ? "OPENROUTER" : "MOCK AI"} · REAL STORE DATA` : "PREVIEW · NO STORE CONNECTED"}</span></div>
-      <div className="assistant-grid">
-        <section className="conversation-panel" aria-label="Assistant conversation">
-          <div className="conversation-head"><div><span className="conversation-head-mark"><AudioLines size={20} strokeWidth={1.5} aria-hidden="true" /></span><div><strong>Conversation</strong><span>{connected ? `${realVoice ? "Gnani voice · " : ""}${realReasoning ? "OpenRouter reasoning" : "mock reasoning"} · connected shop` : "Preview only · no connected shop"}</span></div></div><span>SESSION / LOCAL DEMO</span></div>
-          <div className="conversation-feed" aria-live="polite">{messages.map((message) => <div key={message.id} className={`conversation-entry ${message.role}`}><span className="conversation-speaker">{message.role === "user" ? "YOU" : "SAATHI"}</span><p>{message.text}</p></div>)}{busy && <div className="conversation-processing"><span className="processing-dot" /> {voiceState === "transcribing" ? "Transcribing with Prisma" : "Preparing response"}</div>}</div>
-          <div className="conversation-bottom"><div className="assistant-examples"><span>TRY A PROMPT</span><div>{examples.map((example) => <button key={example} type="button" onClick={() => void runPrompt(example)} disabled={busy || voiceState === "listening"}>{example}<CornerDownRight size={14} aria-hidden="true" /></button>)}</div></div><form className="assistant-composer" onSubmit={submit}><label htmlFor="assistant-input" className="sr-only">Ask Saathi</label><input id="assistant-input" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask about your store…" maxLength={500} disabled={busy || voiceState === "listening"} /><button className="assistant-mic" type="button" disabled={busy || (realVoice && !voiceAvailable)} aria-label={realVoice ? voiceState === "listening" ? "Stop recording" : "Start recording" : "Play sample voice flow; no microphone recording"} title={realVoice ? voiceState === "listening" ? "Stop recording" : "Record with Gnani Prisma" : "Play sample voice flow"} onClick={() => void toggleVoice()}>{realVoice && voiceState === "listening" ? <Square size={17} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}</button><button className="assistant-send" type="submit" disabled={busy || voiceState === "listening" || !input.trim()} aria-label="Send message"><ArrowUp size={19} aria-hidden="true" /></button></form>
-            {realVoice && <div className="voice-controls"><label htmlFor="voice-language">Recording language</label><select id="voice-language" value={voiceLanguage} onChange={(event) => setVoiceLanguage(event.target.value as "hi-IN" | "en-IN")} disabled={busy || voiceState === "listening"}><option value="hi-IN">Hindi</option><option value="en-IN">English</option></select></div>}
-            <p className="composer-caption">{realVoice ? voiceAvailable ? `Record up to 12 seconds. Prisma and Timbre use programme credits; ${realReasoning ? "OpenRouter" : "mock reasoning"} selects the intent.` : "Add the server-side Gnani API key to enable recording." : "Demo microphone plays a sample phrase. It does not record audio."}</p>
-            {voiceNotice && <p className="composer-voice-notice" role="status">{voiceNotice}</p>}
-            {speechUrl && <audio controls src={speechUrl} aria-label="Spoken assistant reply" className="assistant-audio" />}
-          </div>
-        </section>
-        <aside className="assistant-context" aria-label="Action context"><div className="assistant-context-top"><span>INTENT & ACTION</span><ShieldCheck size={20} strokeWidth={1.5} aria-hidden="true" /></div><VoiceStateIndicator state={voiceState} realVoice={realVoice} realReasoning={realReasoning} connected={connected} /><div className="action-surface"><p className="action-eyebrow">LATEST REQUEST</p>{action ? <><h2>{action.title}</h2><span className="action-intent">{action.intent}</span><p className="action-detail">{action.detail}</p><div className="action-warning"><ShieldCheck size={18} aria-hidden="true" /><span>{action.state === "confirmed" ? "Confirmed by your store database." : action.state === "failed" ? "No successful change was confirmed. Check the message before retrying." : "Preview only. No trusted tool ran and no store data changed."}</span></div></> : <><h2>Ready for your first request.</h2><p>Send a phrase to see how Saathi prepares a business action.</p><div className="action-empty-lines" aria-hidden="true"><span /><span /><span /></div></>}</div>{voiceState === "error" && lastPrompt && <button className="assistant-retry" type="button" onClick={() => void runPrompt(lastPrompt)} disabled={busy}><RotateCcw size={16} aria-hidden="true" /> Retry last request</button>}<p className="assistant-context-note">{realReasoning ? "OpenRouter" : "Mock AI"} proposes the intent. Only a validated, authenticated server tool and authoritative database result can confirm it.</p></aside>
-      </div>
+  return <div className="assistant-page assistant-copilot">
+    <header className="assistant-heading"><div><p className="workspace-eyebrow">ASSISTANT / MERCHANT COPILOT</p><h1>Ask Saathi.</h1><p>Speak, type or attach a shopping list. Every store change waits for a trusted database result.</p></div><span className="assistant-mode-badge"><span /> {realVoice ? "GNANI VOICE" : "MOCK VOICE"} · {realReasoning ? "OPENROUTER" : "MOCK REASONING"}</span></header>
+    <div className="assistant-grid">
+      <section className="conversation-panel" aria-label="Assistant conversation">
+        <div className="conversation-head"><div><span className="conversation-head-mark"><AudioLines size={20} strokeWidth={1.5} aria-hidden="true" /></span><div><strong>Conversation</strong><span>{connected ? "Connected shop · verified results" : "Preview · connect a shop to act"}</span></div></div><span>THIS SESSION</span></div>
+        <div className="conversation-feed" aria-live="polite">
+          {messages.map((message) => <article key={message.id} className={`conversation-entry ${message.role}`}><span className="conversation-speaker">{message.role === "user" ? "YOU" : "SAATHI"}</span><div className="conversation-body"><p>{message.text}</p>
+            {message.attachment && <div className="conversation-attachment">{message.attachment.kind === "image" ? <Image unoptimized src={message.attachment.url} alt={`Preview of ${message.attachment.name}`} width={64} height={64} /> : <FileText size={26} aria-hidden="true" />}<span>{message.attachment.name}</span></div>}
+            {message.result?.shoppingList && <ShoppingListResult draft={message.result.shoppingList} busy={busy} inactive={inactiveDrafts.includes(message.id)} onConfirm={(draft, payment) => void confirmSale(draft, payment, message.id)} />}
+            {message.result?.state === "clarify" && <span className="clarification-hint">Waiting for an opening amount · nothing saved yet</span>}
+          </div></article>)}
+          {messages.length === 1 && <div className="assistant-starters"><span>START WITH A REQUEST</span><div>{examples.map((example) => <button key={example} type="button" onClick={() => void runPrompt(example)} disabled={busy}>{example}<ArrowUp size={14} aria-hidden="true" /></button>)}</div></div>}
+          {busy && <div className="conversation-processing"><span className="processing-dot" /> {voiceState === "transcribing" ? "Transcribing with Prisma" : attachment ? "Reading your list" : "Checking request and store"}</div>}
+        </div>
+        <div className="conversation-bottom">
+          {pending && <div className="pending-clarification" role="status"><ShieldCheck size={17} aria-hidden="true" /><span>Opening {pending.customer}&apos;s khata · enter the opening amount to continue.</span><button type="button" onClick={() => setPending(null)} aria-label="Cancel this khata request"><X size={16} aria-hidden="true" /></button></div>}
+          {attachment && <div className="composer-attachment">{attachment.preview.kind === "image" ? <Image unoptimized src={attachment.preview.url} alt={`Preview of ${attachment.preview.name}`} width={48} height={48} /> : <FileText size={24} aria-hidden="true" />}<span><strong>{attachment.preview.name}</strong><small>Draft check only · no stock change</small></span><button type="button" onClick={() => { URL.revokeObjectURL(attachment.preview.url); setAttachment(null); }} aria-label="Remove attachment"><X size={17} aria-hidden="true" /></button></div>}
+          {retryable && lastPrompt && <button className="assistant-retry" type="button" onClick={() => void runPrompt(lastPrompt)} disabled={busy}><RotateCcw size={15} aria-hidden="true" /> Retry safe request</button>}
+          <form className="assistant-composer" onSubmit={submit}><label htmlFor="assistant-input" className="sr-only">Ask Saathi</label><input id="assistant-input" value={input} onChange={(event) => setInput(event.target.value)} placeholder={pending ? "e.g. 100 rupaye" : "Ask about stock, khata or a shopping list…"} maxLength={500} disabled={busy || voiceState === "listening"} />
+            <button type="button" className="assistant-attach" onClick={() => fileInput.current?.click()} disabled={busy || voiceState === "listening"} aria-label="Attach image or PDF"><Paperclip size={20} aria-hidden="true" /></button>
+            <button type="button" className="assistant-camera" onClick={() => cameraInput.current?.click()} disabled={busy || voiceState === "listening"} aria-label="Take shopping list photo"><Camera size={20} aria-hidden="true" /></button>
+            <button className="assistant-mic" type="button" disabled={busy || (realVoice && !voiceAvailable)} aria-label={realVoice ? voiceState === "listening" ? "Stop recording" : "Start recording" : "Play sample voice flow"} onClick={() => void toggleVoice()}>{realVoice && voiceState === "listening" ? <Square size={17} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}</button>
+            <button className="assistant-send" type="submit" disabled={busy || voiceState === "listening" || (!input.trim() && !attachment)} aria-label="Send message"><ArrowUp size={19} aria-hidden="true" /></button></form>
+          <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="sr-only" tabIndex={-1} onChange={(event) => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
+          <input ref={cameraInput} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" tabIndex={-1} onChange={(event) => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
+          <div className="composer-meta"><span>Files are not saved by DukaanSaathi. Images are sent to the free vision provider; lists remain drafts until you confirm a sale.</span>{realVoice && <label>Voice language <select value={voiceLanguage} onChange={(event) => setVoiceLanguage(event.target.value as typeof voiceLanguage)} disabled={busy || voiceState === "listening"}><option value="hi-IN">Hindi</option><option value="en-IN">English</option></select></label>}</div>
+          {voiceNotice && <p className="composer-voice-notice" role="status">{voiceNotice}</p>}
+          {speechUrl && <audio controls src={speechUrl} aria-label="Spoken assistant reply" className="assistant-audio" />}
+        </div>
+      </section>
+      <aside className="assistant-context" aria-label="Action context"><div className="assistant-context-top"><span>TRUSTED ACTION</span><ShieldCheck size={19} strokeWidth={1.5} aria-hidden="true" /></div><VoiceStateIndicator state={voiceState} realVoice={realVoice} realReasoning={realReasoning} connected={connected} />
+        <div className="action-surface"><p className="action-eyebrow">LATEST RESULT</p>{action ? <><h2>{action.title}</h2><span className="action-intent">{action.intent}</span><p className="action-detail">{action.detail}</p><div className="action-warning"><ShieldCheck size={17} aria-hidden="true" /><span>{action.state === "confirmed" ? "Confirmed by your store database." : action.state === "draft" ? "Draft only. Review and confirm to record a sale." : action.state === "clarify" ? "Waiting for your answer. No change saved." : "No successful change was confirmed."}</span></div></> : <><h2>Your next action starts here.</h2><p>Saathi will show the intent, store result and any decision that needs your confirmation.</p></>}</div>
+        <p className="assistant-context-note">{realReasoning ? "OpenRouter" : "Mock reasoning"} proposes the intent. Zod and owner-scoped server tools control every business action.</p>
+      </aside>
     </div>
-  );
+  </div>;
 }

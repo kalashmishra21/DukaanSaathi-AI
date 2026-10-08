@@ -3,25 +3,37 @@ import { businessActionSchema } from "../src/lib/business/schemas";
 import { indiaDayBounds, khataBalance, salePreviewTotal, todayInIndia, totalKhataOutstanding } from "../src/lib/business/calculations";
 import { BusinessToolExecutor, describeToolResult, type BusinessRepository } from "../src/server/tools/business-executor";
 import { executeValidatedToolCall } from "../src/server/tools/contracts";
+import { matchShoppingList } from "../src/lib/assistant/match-shopping-list";
+import { toolCallSchema } from "../src/lib/ai/types/tool-call";
 
 function fakeRepository() {
+  const maggiId = "11111111-1111-4111-8111-111111111112";
   let stock = 20;
   let entries: { type: "gave" | "received"; amount: number }[] = [
     { type: "gave", amount: 460 }, { type: "received", amount: 200 },
   ];
+  const customers = [{ id: "rahul-id", name: "Rahul Sharma" }];
   const repository: BusinessRepository = {
-    async products() { return [{ id: "maggi-id", name: "Maggi", currentStock: stock }]; },
+    async products() { return [{ id: maggiId, name: "Maggi", unit: "packet", currentStock: stock, sellingPrice: 15 }]; },
     async adjustStock(_id, delta) {
       if (stock + delta < 0) throw new Error("Insufficient stock.");
       stock += delta;
       return stock;
     },
-    async customers() { return [{ id: "rahul-id", name: "Rahul Sharma" }]; },
+    async customers() { return customers; },
+    async createCustomer(name) { const id = "11111111-1111-4111-8111-111111111113"; customers.push({ id, name }); return id; },
+    async openAccount(name, amount) { const id = "11111111-1111-4111-8111-111111111114"; customers.push({ id, name }); entries = [...entries, { type: "gave", amount }]; return id; },
     async ledger() { return entries; },
-    async addEntry(_id, amount) { entries = [...entries, { type: "gave", amount }]; },
+    async addEntry(_id, type, amount) { entries = [...entries, { type, amount }]; },
     async dailySales() { return { total: 310, count: 2 }; },
+    async recordSale(items) {
+      const amount = items.reduce((sum, item) => sum + item.quantity * 15, 0);
+      if (items.some((item) => item.quantity > stock)) throw new Error("Insufficient stock. No sale was recorded.");
+      stock -= items.reduce((sum, item) => sum + item.quantity, 0);
+      return { saleId: "11111111-1111-4111-8111-111111111115", total: amount };
+    },
   };
-  return { repository, getStock: () => stock };
+  return { repository, getStock: () => stock, getCustomers: () => customers, getEntries: () => entries };
 }
 
 describe("business boundary", () => {
@@ -78,8 +90,47 @@ describe("business boundary", () => {
 
   it("saves a khata entry before calculating the new balance", async () => {
     const executor = new BusinessToolExecutor(fakeRepository().repository);
-    const result = await executor.execute({ intent: "khata.addEntry", arguments: { customer: "Sharma ji", amountRupees: 100 } });
+    const result = await executor.execute({ intent: "khata.addEntry", arguments: { customer: "Sharma ji", type: "gave", amountRupees: 100 } });
     expect(result).toMatchObject({ ok: true, data: { balance: 360 } });
+  });
+
+  it("creates a customer and opening udhaar through the trusted repository", async () => {
+    const fake = fakeRepository();
+    const result = await executeValidatedToolCall({ intent: "khata.openAccount", arguments: { customer: "Nandini", amountRupees: 100 } }, new BusinessToolExecutor(fake.repository));
+    expect(result).toMatchObject({ ok: true, data: { customer: "Nandini", balance: 100 } });
+    expect(fake.getCustomers()).toContainEqual({ id: "11111111-1111-4111-8111-111111111114", name: "Nandini" });
+    expect(fake.getEntries()).toContainEqual({ type: "gave", amount: 100 });
+  });
+
+  it("records a repayment as received and reduces outstanding", async () => {
+    const result = await new BusinessToolExecutor(fakeRepository().repository).execute({ intent: "khata.addEntry", arguments: { customer: "Sharma ji", type: "received", amountRupees: 50 } });
+    expect(result).toMatchObject({ ok: true, data: { balance: 210, type: "received" } });
+    expect(describeToolResult(result).title).toBe("Payment recorded");
+  });
+
+  it("validates a shopping-list draft without changing stock", async () => {
+    const fake = fakeRepository();
+    const result = await new BusinessToolExecutor(fake.repository).execute({ intent: "inventory.checkList", arguments: { items: [
+      { product: "Maggi", quantity: 2 }, { product: "Tata Salt", quantity: 1 },
+    ] } });
+    expect(result).toMatchObject({ ok: true, data: { draft: { canConfirm: false, estimatedTotal: 30,
+      items: [{ status: "available", unitPrice: 15 }, { status: "missing" }] } } });
+    expect(fake.getStock()).toBe(20);
+    expect(() => matchShoppingList([{ product: "Maggi", quantity: 1 }, { product: "maggi", quantity: 2 }], [{ id: "11111111-1111-4111-8111-111111111112", name: "Maggi", unit: "packet", currentStock: 20, sellingPrice: 15 }])).toThrow("repeats");
+  });
+
+  it("records a confirmed basket only after trusted sale success", async () => {
+    const fake = fakeRepository();
+    const executor = new BusinessToolExecutor(fake.repository);
+    const productId = "11111111-1111-4111-8111-111111111112";
+    const rejected = await executor.execute({ intent: "sales.recordConfirmedBasket", arguments: { items: [{ productId, quantity: 21 }], paymentMethod: "cash" } });
+    expect(rejected.ok).toBe(false);
+    expect(fake.getStock()).toBe(20);
+    expect(describeToolResult(rejected).title).toBe("Action not completed");
+    const saved = await executor.execute({ intent: "sales.recordConfirmedBasket", arguments: { items: [{ productId, quantity: 2 }], paymentMethod: "upi" } });
+    expect(saved).toMatchObject({ ok: true, data: { total: 30 } });
+    expect(fake.getStock()).toBe(18);
+    expect(toolCallSchema.safeParse({ intent: "sales.recordConfirmedBasket", arguments: { items: [{ productId, quantity: 0 }], paymentMethod: "cash" } }).success).toBe(false);
   });
 
   it("returns an authoritative daily sales summary", async () => {

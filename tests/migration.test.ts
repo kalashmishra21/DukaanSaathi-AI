@@ -5,6 +5,7 @@ import { PGlite } from "@electric-sql/pglite";
 const migration = readFileSync("supabase/migrations/20261007000100_initial_business.sql", "utf8");
 const hardeningMigration = readFileSync("supabase/migrations/20261008071313_hardening_indexes.sql", "utf8");
 const demoMigration = readFileSync("supabase/migrations/20261008090000_demo_shop_reset.sql", "utf8");
+const assistantMigration = readFileSync("supabase/migrations/20261008160000_assistant_open_khata.sql", "utf8");
 const userId = "11111111-1111-4111-8111-111111111111";
 const otherId = "22222222-2222-4222-8222-222222222222";
 
@@ -25,6 +26,7 @@ describe("Supabase migration in local PostgreSQL", () => {
       await db.exec(migration);
       await db.exec(hardeningMigration);
       await db.exec(demoMigration);
+      await db.exec(assistantMigration);
       const hardening = await db.query<{ function_executable: boolean; index_count: number }>(`
         select
           has_function_privilege('authenticated', 'public.create_profile_for_user()', 'EXECUTE') as function_executable,
@@ -57,6 +59,16 @@ describe("Supabase migration in local PostgreSQL", () => {
           (select sum(case when type = 'gave' then amount else -amount end) from public.khata_entries where shop_id = '${shopId}') outstanding
       `);
       expect(seeded.rows[0]).toEqual({ products: 8, customers: 4, sales: 4, movements: 18, entries: 9, low_stock: 2, outstanding: "770.00" });
+      const opened = await db.query<{ open_khata_account: string }>(`select public.open_khata_account('${shopId}', 'Nandini', 100)`);
+      const account = await db.query<{ entries: number; balance: string }>(`
+        select count(*)::integer entries, sum(case when type = 'gave' then amount else -amount end) balance
+        from public.khata_entries where shop_id = '${shopId}' and customer_id = '${opened.rows[0].open_khata_account}'
+      `);
+      expect(account.rows[0]).toEqual({ entries: 1, balance: "100.00" });
+      await expect(db.query(`select public.open_khata_account('${shopId}', 'Nandini', 50)`)).rejects.toThrow();
+      await expect(db.query(`select public.open_khata_account('${shopId}', 'Second Nandini', -10)`)).rejects.toThrow();
+      const noPartialAccount = await db.query<{ count: number }>(`select count(*)::integer count from public.customers where shop_id = '${shopId}' and name = 'Second Nandini'`);
+      expect(noPartialAccount.rows[0].count).toBe(0);
       const newProduct = await db.query<{ create_product: string }>(`select public.create_product('${shopId}', 'Test Tea', 'TST-001', 'packet', 25, 18, 3, 7)`);
       const opening = await db.query<{ current_stock: number; movements: number }>(`
         select p.current_stock,
@@ -101,6 +113,7 @@ describe("Supabase migration in local PostgreSQL", () => {
       expect(hidden.rows[0].count).toBe(0);
       await expect(db.query(`select public.reset_demo_shop()`)).rejects.toThrow();
       await expect(db.query(`select public.adjust_stock('${resetShopId}', (select id from public.products where shop_id = '${resetShopId}' limit 1), 1, 'Cross shop')`)).rejects.toThrow();
+      await expect(db.query(`select public.open_khata_account('${resetShopId}', 'Unauthorized', 50)`)).rejects.toThrow();
     } finally {
       await db.close();
     }

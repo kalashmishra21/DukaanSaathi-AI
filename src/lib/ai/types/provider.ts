@@ -1,4 +1,6 @@
 import type { ReasoningResult } from "./tool-call";
+import type { z } from "zod";
+import type { pendingClarificationSchema, recentTurnSchema } from "./tool-call";
 
 export type TranscriptionInput = {
   audio: Uint8Array;
@@ -15,6 +17,8 @@ export type TranscriptionResult = {
 export type ReasoningInput = {
   text: string;
   locale?: string;
+  recent?: z.infer<typeof recentTurnSchema>[];
+  pending?: z.infer<typeof pendingClarificationSchema> | null;
 };
 
 export type SpeechResult =

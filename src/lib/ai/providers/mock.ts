@@ -2,6 +2,8 @@ import { reasoningResultSchema } from "../types/tool-call";
 import type { AIProvider, ReasoningInput, SpeechResult, TranscriptionInput, TranscriptionResult } from "../types/provider";
 import type { ReasoningResult } from "../types/tool-call";
 import { todayInIndia } from "../../business/calculations";
+import { completePendingAmount } from "../../assistant/clarification";
+import { parseTextShoppingList } from "../../assistant/parse-text-list";
 
 export class MockAIProvider implements AIProvider {
   constructor(private readonly today: () => string = todayInIndia) {}
@@ -14,11 +16,44 @@ export class MockAIProvider implements AIProvider {
   }
 
   async reason(input: ReasoningInput): Promise<ReasoningResult> {
+    const completed = completePendingAmount(input);
+    if (completed) return completed;
     const text = input.text.trim()
       .replace(/^मैगी के ([0-9०-९]+) पैकेट (?:ऐड|एड|जोड़) कर दो[.!?।]?$/u, (_, amount: string) =>
         `Maggi ke ${amount.replace(/[०-९]/gu, (digit) => String("०१२३४५६७८९".indexOf(digit)))} packet add kar do`)
       .replace(/^शर्मा जी का कितना उधार है[.!?।]?$/u, "Sharma ji ka kitna udhaar hai?")
-      .replace(/^आज की (?:कुल|टोटल) सेल बताओ[.!?।]?$/u, "Aaj ki total sale batao");
+      .replace(/^आज की (?:कुल|टोटल) सेल बताओ[.!?।]?$/u, "Aaj ki total sale batao")
+      .replace(/[०-९]/gu, (digit) => String("०१२३४५६७८९".indexOf(digit)));
+
+    const openAccount = /^(.+?) ke naam se (\d+) rupaye ka naya udhaar khata bana do[.!?]?$/i.exec(text);
+    if (openAccount) return reasoningResultSchema.parse({ kind: "tool_call", tool: {
+      intent: "khata.openAccount", arguments: { customer: openAccount[1], amountRupees: Number(openAccount[2]) },
+    } });
+
+    const clarifyAccount = /^(.+?) naam se customer add karo udhaar wala[.!?]?$/i.exec(text);
+    if (clarifyAccount) return reasoningResultSchema.parse({ kind: "clarify",
+      question: `${clarifyAccount[1]} ke khate mein shuru mein kitna udhaar likhun?`,
+      pending: { kind: "open-account-amount", customer: clarifyAccount[1] },
+    });
+
+    const newCustomer = /^(.+?) naam se customer add karo[.!?]?$/i.exec(text);
+    if (newCustomer) return reasoningResultSchema.parse({ kind: "tool_call", tool: {
+      intent: "customer.create", arguments: { customer: newCustomer[1] },
+    } });
+
+    const payment = /^(.+?) ne (\d+) rupaye wapas diye[.!?]?$/i.exec(text);
+    if (payment) return reasoningResultSchema.parse({ kind: "tool_call", tool: {
+      intent: "khata.addEntry", arguments: { customer: payment[1], type: "received", amountRupees: Number(payment[2]) },
+    } });
+    const shoppingList = /^(?:shopping list|list check karo):\s*(.+)$/i.exec(text);
+    if (shoppingList) {
+      try {
+        const items = parseTextShoppingList(shoppingList[1].replace(/\s*,\s*/g, "\n"));
+        return reasoningResultSchema.parse({ kind: "tool_call", tool: { intent: "inventory.checkList", arguments: { items } } });
+      } catch {
+        return reasoningResultSchema.parse({ kind: "unsupported", message: "Write each list item as product name and quantity, for example Maggi 2, Parle-G 3." });
+      }
+    }
     const inventory = /^maggi ke (\d+) packet add kar do[.!?]?$/i.exec(text);
 
     if (inventory) {
@@ -35,19 +70,20 @@ export class MockAIProvider implements AIProvider {
       kind: "tool_call", tool: { intent: "inventory.getStock", arguments: { product: stock[1] } },
     });
 
-    if (/^sharma ji ka kitna udhaar hai[.!?]?$/i.test(text)) {
+    const balanceRequest = /^(.+?) ka kitna udhaar hai[.!?]?$/i.exec(text);
+    if (balanceRequest) {
       return reasoningResultSchema.parse({
         kind: "tool_call",
-        tool: { intent: "khata.getBalance", arguments: { customer: "Sharma ji" } },
+        tool: { intent: "khata.getBalance", arguments: { customer: balanceRequest[1] } },
       });
     }
 
-    const khataEntry = /^sharma ji ko (\d+) rupaye udhaar likh do[.!?]?$/i.exec(text);
+    const khataEntry = /^(.+?) ko (\d+) rupaye udhaar likh do[.!?]?$/i.exec(text);
     if (khataEntry) {
-      const amount = Number(khataEntry[1]);
+      const amount = Number(khataEntry[2]);
       if (!Number.isInteger(amount) || amount < 1 || amount > 10000000) return reasoningResultSchema.parse({ kind: "unsupported", message: "Amount is outside the demo range." });
       return reasoningResultSchema.parse({
-        kind: "tool_call", tool: { intent: "khata.addEntry", arguments: { customer: "Sharma ji", amountRupees: amount } },
+        kind: "tool_call", tool: { intent: "khata.addEntry", arguments: { customer: khataEntry[1], type: "gave", amountRupees: amount } },
       });
     }
 
