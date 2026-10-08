@@ -31,7 +31,7 @@ export default function Home() {
               <Link className="button button-copper" href="/app/assistant">Explore the workspace <ArrowUpRight size={18} aria-hidden="true" /></Link>
               <a className="landing-text-link" href="#voice-demo">See a voice example <ArrowDown size={17} aria-hidden="true" /></a>
             </div>
-            <p className="landing-proof"><span /> Mock AI reasoning · no Gnani credits used</p>
+            <p className="landing-proof"><span /> Landing preview is mocked · store actions require sign-in</p>
           </div>
           <SaathiCore />
         </section>
@@ -47,7 +47,7 @@ export default function Home() {
 
         <section id="voice-demo" className="landing-demo-section" aria-labelledby="demo-title">
           <div className="landing-frame landing-demo-grid">
-            <div className="landing-demo-intro"><p className="landing-eyebrow">A CONVERSATION, NOT A FORM</p><h2 id="demo-title">Ask the way<br />you <em>think.</em></h2><p>Hinglish is welcome here. Try a sample phrase to see structured mock understanding. This landing preview does not change store data; the signed-in assistant can run trusted tools.</p><Link className="landing-text-link dark" href="/app/assistant">Try the mock assistant <ArrowRight size={18} aria-hidden="true" /></Link></div>
+            <div className="landing-demo-intro"><p className="landing-eyebrow">A CONVERSATION, NOT A FORM</p><h2 id="demo-title">Ask the way<br />you <em>think.</em></h2><p>Hinglish is welcome here. Try a sample phrase to see structured mock understanding. This landing preview does not change store data; the signed-in assistant can run trusted tools.</p><Link className="landing-text-link dark" href="/app/assistant">Try the assistant <ArrowRight size={18} aria-hidden="true" /></Link></div>
             <LandingVoiceDemo />
           </div>
         </section>
@@ -56,7 +56,7 @@ export default function Home() {
 
         <section className="landing-final"><div className="landing-frame landing-final-inner"><div><p className="landing-eyebrow">BUILT FOR THE NEXT SHIFT</p><h2>A better store day<br />starts with <em>a sentence.</em></h2></div><div><p>Explore the workspace. Connect Supabase and sign in to work with real store records. No paid AI service is required.</p><Link className="button button-dark" href="/app/assistant">Enter DukaanSaathi <ArrowUpRight size={18} aria-hidden="true" /></Link></div></div></section>
       </main>
-      <footer className="landing-footer landing-frame"><Link className="footer-brand" href="/">DukaanSaathi AI</Link><span>Built for the stores that keep India moving.</span><span>MOCK AI / TRUSTED DATA</span></footer>
+      <footer className="landing-footer landing-frame"><Link className="footer-brand" href="/">DukaanSaathi AI</Link><span>Built for the stores that keep India moving.</span><span>VALIDATED INTENT / TRUSTED DATA</span></footer>
     </div>
   );
 }

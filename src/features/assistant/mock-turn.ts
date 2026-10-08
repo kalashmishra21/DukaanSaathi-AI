@@ -10,10 +10,10 @@ export type MockTurn = {
 export function describeMockTurn(result: ReasoningResult): MockTurn {
   if (result.kind === "unsupported") {
     return {
-      title: "Not available in this mock",
+      title: "Request not understood",
       intent: "unsupported",
-      detail: "The request is outside the deterministic mock vocabulary.",
-      reply: "I can understand the sample stock, khata and sales phrases shown here. Please try one of those examples.",
+      detail: "No safe business action was identified.",
+      reply: "I could not safely identify a business action. Please rephrase the request. Nothing was changed.",
     };
   }
 
@@ -23,7 +23,7 @@ export function describeMockTurn(result: ReasoningResult): MockTurn {
       title: "Stock adjustment proposed",
       intent: result.tool.intent,
       detail: `${product} · ${delta > 0 ? "+" : ""}${delta} packets`,
-      reply: `I understood a ${delta > 0 ? "stock increase" : "stock decrease"} for ${product}. This is only a mock preview; no inventory was changed.`,
+      reply: `I understood a ${delta > 0 ? "stock increase" : "stock decrease"} for ${product}. This is only a preview; no inventory was changed.`,
     };
   }
 

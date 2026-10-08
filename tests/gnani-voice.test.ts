@@ -1,13 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAIProvider } from "../src/lib/ai/provider";
 import { GnaniVoiceProvider } from "../src/lib/ai/providers/gnani-voice";
 import { encodeWav, isShortWav } from "../src/lib/ai/wav";
 
 describe("Gnani voice boundary without network calls", () => {
+  afterEach(() => vi.unstubAllEnvs());
   it("keeps mock mode free of Gnani credentials", () => {
     expect(createAIProvider({ AI_PROVIDER: "mock" })).toBeDefined();
+    vi.stubEnv("GNANI_API_KEY", "");
     expect(() => createAIProvider({ AI_PROVIDER: "gnani" })).toThrow("GNANI_API_KEY");
-    expect(createAIProvider({ AI_PROVIDER: "gnani", GNANI_API_KEY: "test-key" })).toBeInstanceOf(GnaniVoiceProvider);
+    vi.stubEnv("GNANI_API_KEY", "test-key");
+    expect(createAIProvider({ AI_PROVIDER: "gnani" })).toBeInstanceOf(GnaniVoiceProvider);
   });
 
   it("encodes a bounded mono WAV suitable for Prisma", () => {

@@ -1,10 +1,10 @@
 # DukaanSaathi AI
 
-A voice-first AI copilot for Indian kirana stores and small retailers, built for the Gnani AI internship competition. It combines a Next.js workspace, trusted Supabase store operations, and a mock-first assistant.
+A voice-first AI copilot for Indian kirana stores and small retailers, built for the Gnani AI internship competition. It combines a Next.js workspace, trusted Supabase store operations, and a mock-first assistant with an optional OpenRouter reasoner.
 
 ## Current scope
 
-The landing page, Saathi Core, and assistant work with `AI_PROVIDER=mock` and use no Gnani credits. With Supabase configured, a signed-in shop owner can manage inventory, khata, sales, and a database-derived overview. The assistant recognizes a small set of deterministic phrases and sends validated intents to trusted server tools. The optional `gnani` mode adds real Prisma STT and Timbre TTS around that same mock intent parser. **Evon inference is not connected.** Live Gnani validation requires a private API key and has not yet been completed.
+The landing page, Saathi Core, and assistant work with `AI_PROVIDER=mock` and `AI_REASONER=mock` without AI service calls. With Supabase configured, a signed-in shop owner can manage inventory, khata, sales, and a database-derived overview. The assistant sends validated intents to trusted server tools. Optional `AI_PROVIDER=gnani` adds real Prisma STT and Timbre TTS; optional `AI_REASONER=openrouter` replaces deterministic intent selection with a free model on OpenRouter. **Evon inference is not connected.** Neither model output nor browser code can write store data directly.
 
 ## Local setup
 
@@ -21,7 +21,11 @@ The seed contains eight products, four fictional customers, khata history, four 
 
 ## Optional Gnani voice mode
 
-Keep `AI_PROVIDER=mock` during normal development. To enable paid voice requests, place `AI_PROVIDER=gnani` and a private `GNANI_API_KEY` in `.env.local`, then restart the server. This key is read only by server routes. The assistant records up to 12 seconds of microphone audio, sends a short WAV to the server for [Prisma REST transcription](https://docs.gnani.ai/api/STT/speech-to-text), validates the deterministic intent, runs an authenticated trusted tool, then requests a spoken reply from [Timbre REST](https://docs.gnani.ai/api/TTS/tts-inference). If speech fails after a tool succeeds, the text still shows the authoritative result. Evon v3.3 is [officially documented for self-hosting](https://huggingface.co/gnani/gnani-evon-v3.3-30B-A3B); no hosted Evon URL is assumed here.
+Keep `AI_PROVIDER=mock` during normal development. To enable paid voice requests, place `AI_PROVIDER=gnani` and a private `GNANI_API_KEY` in `.env.local`, then restart the server. This key is read only by server routes. The assistant records up to 12 seconds of microphone audio, sends a short WAV to the server for [Prisma REST transcription](https://docs.gnani.ai/api/STT/speech-to-text), validates the selected intent, runs an authenticated trusted tool, then requests a spoken reply from [Timbre REST](https://docs.gnani.ai/api/TTS/tts-inference). If speech fails after a tool succeeds, the text still shows the authoritative result. Evon v3.3 is [officially documented for self-hosting](https://huggingface.co/gnani/gnani-evon-v3.3-30B-A3B); no hosted Evon URL is assumed here.
+
+## Optional OpenRouter reasoning
+
+Set `AI_REASONER=openrouter`, `OPENROUTER_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free`, and a private `OPENROUTER_API_KEY` in `.env.local`, then restart. `AI_PROVIDER` independently controls voice. The free route can be rate limited or return no tool call; those cases fail closed, without a database mutation. `AI_REASONER=mock` restores the deterministic offline reasoner. The [Phase 5 benchmark](docs/reasoner-benchmark.md) records the model selection and its limits.
 
 ## Checks
 

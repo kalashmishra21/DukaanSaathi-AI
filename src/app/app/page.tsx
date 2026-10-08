@@ -5,6 +5,7 @@ import { DemoShopReset } from "@/components/business/demo-shop-reset";
 import { rupees } from "@/lib/business/calculations";
 import { getShopContext } from "@/server/data/context";
 import { getOverview } from "@/server/data/queries";
+import { readProviderConfig } from "@/lib/env/config";
 
 export default async function Overview() {
   const context = await getShopContext();
@@ -12,8 +13,9 @@ export default async function Overview() {
   let data: Awaited<ReturnType<typeof getOverview>> | null = null;
   try { data = await getOverview(context); } catch { /* Render the unavailable state. */ }
   if (!data) return <ConnectionState kind="unavailable" />;
+  const reasonerLabel = readProviderConfig().AI_REASONER === "openrouter" ? "OpenRouter reasoning" : "mock reasoning";
   return <div className="overview-page business-page">
-      <div className="workspace-page-heading"><p className="workspace-eyebrow">OVERVIEW / {context.shop.name.toUpperCase()}</p><h1>Your store,<br /><em>in focus.</em></h1><p>Numbers below come from your connected shop. Saathi uses mock reasoning, while trusted tools handle business changes.</p></div>
+      <div className="workspace-page-heading"><p className="workspace-eyebrow">OVERVIEW / {context.shop.name.toUpperCase()}</p><h1>Your store,<br /><em>in focus.</em></h1><p>Numbers below come from your connected shop. Saathi uses {reasonerLabel}, while trusted tools handle business changes.</p></div>
       <div className="metric-grid">
         <Link href="/app/sales" className="metric"><span>TODAY&apos;S SALES</span><strong>{rupees(data.todaySales)}</strong><small>{data.saleCount} recorded sale{data.saleCount === 1 ? "" : "s"}</small></Link>
         <Link href="/app/inventory" className="metric"><span>LOW STOCK</span><strong>{data.lowStock.length}</strong><small>At or below reorder threshold</small></Link>

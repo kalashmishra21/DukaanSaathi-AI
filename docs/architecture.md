@@ -1,4 +1,4 @@
-# Architecture — Phase 4
+# Architecture — Phase 5
 
 DukaanSaathi is one Next.js App Router application backed by Supabase Auth and Postgres when configured. It is sized for a small challenge demo. The landing page and deterministic mock AI preview work without credentials; the connected workspace requires a signed-in shop owner.
 
@@ -6,13 +6,13 @@ DukaanSaathi is one Next.js App Router application backed by Supabase Auth and P
 
 ```text
 User text or short voice clip → optional Prisma transcription
-          → deterministic mock intent → Zod validation
+          → mock or OpenRouter intent → Zod validation
           → authenticated server tool → owner-scoped Supabase operation
           → authoritative database result → assistant confirmation
           → optional Timbre speech
 ```
 
-The mock provider makes no Gnani calls. `AI_PROVIDER=gnani` uses official Prisma REST for short WAV transcription and Timbre REST for speech while continuing to use deterministic mock reasoning. Evon has no configured hosted endpoint. The browser never receives a Gnani key. Only a successful trusted operation may produce a completion claim. Unsupported phrases remain previews.
+The mock provider makes no network calls. `AI_PROVIDER=gnani` uses official Prisma REST for short WAV transcription and Timbre REST for speech. Separately, `AI_REASONER=openrouter` proposes one tool call from a configured free model; `AI_REASONER=mock` preserves the deterministic offline fallback. Evon has no configured hosted endpoint. The browser never receives a Gnani or OpenRouter key. A missing, malformed, multiple, or schema-invalid tool proposal cannot reach the business executor. An upstream error does not silently switch to another reasoner or mutate data. Only a successful trusted operation may produce a completion claim.
 
 `/api/assistant/turn` validates user text and the provider result before calling `BusinessToolExecutor`. That executor has no model or browser database access. Its Supabase repository queries the authenticated owner's shop. The five tool contracts are `inventory.adjust`, `inventory.getStock`, `khata.getBalance`, `khata.addEntry`, and `sales.getDailySummary`. Browser forms post validated actions to `/api/business`; neither route accepts a caller-supplied shop ID. `/api/voice/transcribe` accepts only a short mono WAV from an authenticated owner with a connected shop; it calls Prisma only in Gnani mode. TTS is requested after the trusted tool result is known.
 

@@ -17,7 +17,7 @@ export function WorkspaceNav() {
   const pathname = usePathname();
   return (
     <nav className="workspace-nav" aria-label="Workspace navigation">
-      {items.map(({ href, label, icon: Icon }) => <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined}><Icon size={18} strokeWidth={1.7} aria-hidden="true" /><span>{label}</span></Link>)}
+      {items.map(({ href, label, icon: Icon }) => <Link key={href} href={href} prefetch={true} aria-current={pathname === href ? "page" : undefined}><Icon size={18} strokeWidth={1.7} aria-hidden="true" /><span>{label}</span></Link>)}
     </nav>
   );
 }

@@ -51,7 +51,7 @@ export class MockAIProvider implements AIProvider {
       });
     }
 
-    if (/^aaj ki total sale batao[.!?]?$/i.test(text)) return reasoningResultSchema.parse({
+    if (/^aaj ki (?:total )?sale batao[.!?]?$/i.test(text)) return reasoningResultSchema.parse({
       kind: "tool_call", tool: { intent: "sales.getDailySummary", arguments: { date: this.today() } },
     });
 

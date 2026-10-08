@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAIProvider } from "../src/lib/ai/provider";
 import { MockAIProvider } from "../src/lib/ai/providers/mock";
 import { reasoningResultSchema } from "../src/lib/ai/types/tool-call";
 import { executeValidatedToolCall } from "../src/server/tools/contracts";
 
 describe("MockAIProvider", () => {
+  afterEach(() => vi.unstubAllEnvs());
   const provider = new MockAIProvider();
 
   it("returns deterministic structured inventory intent", async () => {
@@ -32,9 +33,10 @@ describe("MockAIProvider", () => {
 
   it("returns a date-scoped sales intent from the mock phrase", async () => {
     const fixed = new MockAIProvider(() => "2026-10-07");
-    await expect(fixed.reason({ text: "Aaj ki total sale batao" })).resolves.toEqual({
+    await expect(fixed.reason({ text: "Aaj ki sale batao" })).resolves.toEqual({
       kind: "tool_call", tool: { intent: "sales.getDailySummary", arguments: { date: "2026-10-07" } },
     });
+    await expect(fixed.reason({ text: "Aaj ki total sale batao" })).resolves.toMatchObject({ kind: "tool_call" });
   });
 
   it("rejects invalid structured output", () => {
@@ -50,6 +52,7 @@ describe("MockAIProvider", () => {
   });
 
   it("requires a server-side key for the Gnani voice provider", () => {
+    vi.stubEnv("GNANI_API_KEY", "");
     expect(() => createAIProvider({ AI_PROVIDER: "gnani" })).toThrow();
   });
 

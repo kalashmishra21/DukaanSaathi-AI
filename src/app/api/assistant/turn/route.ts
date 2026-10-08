@@ -26,7 +26,12 @@ export async function POST(request: Request) {
   try { provider = createAIProvider(); } catch {
     return Response.json({ error: "The selected AI provider is not configured. Nothing was changed." }, { status: 503 });
   }
-  const reasoning = reasoningResultSchema.parse(await provider.reason({ text: parsed.data.text }));
+  let reasoning;
+  try { reasoning = reasoningResultSchema.parse(await provider.reason({ text: parsed.data.text })); }
+  catch (error) {
+    console.warn("Assistant reasoning rejected:", error instanceof Error && /^OpenRouter /.test(error.message) ? error.message : error instanceof Error ? error.name : "UnknownError");
+    return Response.json({ error: "The request could not be safely interpreted. Nothing was changed." }, { status: 503 });
+  }
   const preview = describeMockTurn(reasoning);
   if (reasoning.kind === "unsupported") return Response.json({ state: "unsupported", ...preview });
   if (context.kind === "setup" || context.kind === "no-shop") return Response.json({ state: "preview", ...preview });
