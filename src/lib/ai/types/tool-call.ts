@@ -32,6 +32,14 @@ export const toolCallSchema = z.discriminatedUnion("intent", [
     intent: z.literal("sales.getDailySummary"),
     arguments: z.object({ date: z.iso.date() }).strict(),
   }).strict(),
+  z.object({ intent: z.literal("inventory.getReorderSuggestions"), arguments: z.object({}).strict() }).strict(),
+  z.object({ intent: z.literal("supplier.list"), arguments: z.object({}).strict() }).strict(),
+  z.object({ intent: z.literal("supplier.create"), arguments: z.object({ name }).strict() }).strict(),
+  z.object({ intent: z.literal("orders.getOpen"), arguments: z.object({}).strict() }).strict(),
+  z.object({ intent: z.literal("orders.createDraft"), arguments: z.object({
+    supplier: name,
+    items: z.array(z.object({ product: name, quantity: z.number().int().min(1).max(10000) }).strict()).min(1).max(30),
+  }).strict() }).strict(),
 ]);
 
 export const reasoningResultSchema = z.discriminatedUnion("kind", [

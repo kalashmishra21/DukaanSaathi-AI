@@ -3,7 +3,7 @@ import "server-only";
 import { z } from "zod";
 import { indiaDayBounds } from "@/lib/business/calculations";
 import type { ShopContext } from "./context";
-import type { BusinessRepository, CustomerRecord, LedgerRecord, ProductRecord } from "../tools/business-executor";
+import type { BusinessRepository, CustomerRecord, LedgerRecord, ProductRecord, SupplierRecord, ReorderRecord, OpenOrderRecord } from "../tools/business-executor";
 
 type ReadyContext = Extract<ShopContext, { kind: "ready" }>;
 
@@ -81,5 +81,46 @@ export class SupabaseBusinessRepository implements BusinessRepository {
       .select("total_amount").eq("shop_id", this.context.shop.id).eq("id", saleId).single();
     if (readError) throw new Error("Sale may have been saved. Check recent sales before retrying.");
     return { saleId, total: z.coerce.number().parse(sale.total_amount) };
+  }
+
+  async suppliers(): Promise<SupplierRecord[]> {
+    const { data, error } = await this.context.client.from("suppliers").select("id,name").eq("shop_id", this.context.shop.id).order("name");
+    if (error) throw new Error("Supplier directory is unavailable.");
+    return z.array(z.object({ id: z.uuid(), name: z.string() })).parse(data);
+  }
+
+  async createSupplier(name: string): Promise<string> {
+    const { data, error } = await this.context.client.from("suppliers").insert({ shop_id: this.context.shop.id, name }).select("id").single();
+    if (error) throw new Error(error.code === "23505" ? "A supplier with that name already exists." : "Supplier could not be saved.");
+    return z.uuid().parse(data.id);
+  }
+
+  async reorderSuggestions(): Promise<ReorderRecord[]> {
+    const { data, error } = await this.context.client.from("products")
+      .select("name,current_stock,low_stock_threshold").eq("shop_id", this.context.shop.id).is("archived_at", null);
+    if (error) throw new Error("Reorder suggestions are unavailable.");
+    return z.array(z.object({ name: z.string(), current_stock: z.number().int(), low_stock_threshold: z.number().int() })).parse(data)
+      .filter((product) => product.current_stock <= product.low_stock_threshold)
+      .map((product) => ({ product: product.name, stock: product.current_stock, threshold: product.low_stock_threshold,
+        quantity: Math.max(1, product.low_stock_threshold * 2 - product.current_stock) }));
+  }
+
+  async openOrders(): Promise<OpenOrderRecord[]> {
+    const [ordersResult, suppliersResult] = await Promise.all([
+      this.context.client.from("purchase_orders").select("id,supplier_id,status").eq("shop_id", this.context.shop.id).in("status", ["draft", "placed"]).order("created_at", { ascending: false }).limit(20),
+      this.context.client.from("suppliers").select("id,name").eq("shop_id", this.context.shop.id),
+    ]);
+    if (ordersResult.error || suppliersResult.error) throw new Error("Purchase orders are unavailable.");
+    const orders = z.array(z.object({ id: z.uuid(), supplier_id: z.uuid(), status: z.enum(["draft", "placed"]) })).parse(ordersResult.data);
+    const suppliers = z.array(z.object({ id: z.uuid(), name: z.string() })).parse(suppliersResult.data);
+    return orders.map((order) => ({ id: order.id, supplier: suppliers.find((supplier) => supplier.id === order.supplier_id)?.name ?? "Supplier", status: order.status, items: [] }));
+  }
+
+  async createOrderDraft(supplierId: string, items: { productId: string; quantity: number }[]): Promise<string> {
+    const { data, error } = await this.context.client.rpc("create_purchase_order", {
+      p_shop_id: this.context.shop.id, p_supplier_id: supplierId, p_items: items.map((item) => ({ ...item, unitCost: null })), p_note: "Assistant draft",
+    });
+    if (error) throw new Error(error.code === "P0002" ? "Supplier or product not found." : "Purchase order draft could not be saved.");
+    return z.uuid().parse(data);
   }
 }

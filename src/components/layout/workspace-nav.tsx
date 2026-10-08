@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartNoAxesCombined, House, MessageCircleMore, Package, ReceiptText, ScrollText } from "lucide-react";
+import { ChartNoAxesCombined, House, MessageCircleMore, Package, ReceiptText, ScrollText, Truck } from "lucide-react";
 
 const items = [
   { href: "/app", label: "Overview", icon: House },
@@ -10,6 +10,7 @@ const items = [
   { href: "/app/inventory", label: "Inventory", icon: Package },
   { href: "/app/khata", label: "Khata", icon: ScrollText },
   { href: "/app/sales", label: "Sales", icon: ChartNoAxesCombined },
+  { href: "/app/suppliers", label: "Suppliers", icon: Truck },
   { href: "/app/orders", label: "Orders", icon: ReceiptText },
 ];
 

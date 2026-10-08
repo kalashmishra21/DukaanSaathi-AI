@@ -22,9 +22,9 @@ type RecentTurn = z.infer<typeof recentTurnSchema>;
 
 const examples = [
   "Maggi ke 20 packet add kar do",
-  "Nandini ke naam se 100 rupaye ka naya udhaar khata bana do",
-  "Nandini ne 50 rupaye wapas diye",
-  "Aaj ki sale batao",
+  "Sharma ji ka kitna udhaar hai?",
+  "Low-stock items ki reorder list bana do",
+  "Open orders dikhao",
 ];
 const transcriptSchema = z.object({ text: z.string().trim().min(1), language: z.string().optional() });
 const errorSchema = z.object({ error: z.string().min(1).max(250) });
@@ -40,12 +40,11 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   const fileInput = useRef<HTMLInputElement | null>(null);
   const cameraInput = useRef<HTMLInputElement | null>(null);
   const objectUrls = useRef<string[]>([]);
+  const latestMessage = useRef<HTMLElement | null>(null);
   const nextId = useRef(1);
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<{ file: File; preview: AttachmentPreview } | null>(null);
-  const [messages, setMessages] = useState<Message[]>([{ id: 0, role: "assistant", text: connected
-    ? "Namaste. Ask about stock, khata, sales or a shopping list. I confirm changes only after your store does."
-    : "Namaste. Connect a shop to work with real inventory, khata and sales records." }]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [pending, setPending] = useState<z.infer<typeof pendingClarificationSchema> | null>(null);
   const [inactiveDrafts, setInactiveDrafts] = useState<number[]>([]);
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
@@ -57,6 +56,10 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   const [lastPrompt, setLastPrompt] = useState("");
   const [retryable, setRetryable] = useState(false);
   const [action, setAction] = useState<AssistantResponse | null>(null);
+
+  useEffect(() => {
+    if (messages.length > 0) latestMessage.current?.scrollIntoView({ block: "start", behavior: "instant" });
+  }, [messages.length]);
 
   useEffect(() => () => {
     if (recordingTimer.current) clearTimeout(recordingTimer.current);
@@ -257,17 +260,19 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   const realVoice = providerMode === "gnani";
   const realReasoning = reasonerMode === "openrouter";
   return <div className="assistant-page assistant-copilot">
-    <header className="assistant-heading"><div><p className="workspace-eyebrow">ASSISTANT / MERCHANT COPILOT</p><h1>Ask Saathi.</h1><p>Speak, type or attach a shopping list. Every store change waits for a trusted database result.</p></div><span className="assistant-mode-badge"><span /> {realVoice ? "GNANI VOICE" : "MOCK VOICE"} · {realReasoning ? "OPENROUTER" : "MOCK REASONING"}</span></header>
+    <header className="assistant-heading"><div><h1>Ask Saathi<span>.</span></h1><p>Run your store in your own words. Speak, type, or check a shopping list.</p></div><span className="assistant-mode-badge"><span /> {connected ? "STORE CONNECTED" : "PREVIEW MODE"} · {realReasoning ? "AI REASONING" : "MOCK REASONING"}</span></header>
     <div className="assistant-grid">
       <section className="conversation-panel" aria-label="Assistant conversation">
-        <div className="conversation-head"><div><span className="conversation-head-mark"><AudioLines size={20} strokeWidth={1.5} aria-hidden="true" /></span><div><strong>Conversation</strong><span>{connected ? "Connected shop · verified results" : "Preview · connect a shop to act"}</span></div></div><span>THIS SESSION</span></div>
+        <div className="conversation-head"><div><span className="conversation-head-mark"><AudioLines size={20} strokeWidth={1.5} aria-hidden="true" /></span><div><strong>Store conversation</strong><span>{connected ? "Answers from your shop records" : "Connect a shop to act"}</span></div></div><span>THIS SESSION</span></div>
         <div className="conversation-feed" aria-live="polite">
-          {messages.map((message) => <article key={message.id} className={`conversation-entry ${message.role}`} data-state={message.failed ? "failed" : message.result?.state}><span className="conversation-speaker">{message.role === "user" ? "YOU" : "SAATHI"}</span><div className="conversation-body">{(message.result || message.failed) && <span className="conversation-outcome">{message.failed ? "Needs attention" : message.result?.state === "confirmed" ? "Store confirmed" : message.result?.state === "draft" ? "For review" : "Awaiting detail"}</span>}<p>{message.text}</p>
+          {messages.length === 0 && <div className="assistant-welcome"><div className="assistant-welcome-mark"><AudioLines size={27} strokeWidth={1.4} aria-hidden="true" /></div><h2>What needs doing<br /><em>in your shop?</em></h2><p>{connected ? "Ask a question, update stock, or turn a list into a checked draft. Store changes appear only after they are saved." : "Connect your shop to check real stock, khata, sales and orders."}</p><button className="assistant-speak-primary" type="button" onClick={() => void toggleVoice()} disabled={busy || (realVoice && !voiceAvailable)}><Mic size={19} aria-hidden="true" /> {realVoice ? "Speak to Saathi" : "Try a sample voice request"}</button></div>}
+          {messages.map((message, index) => <article ref={index === messages.length - 1 ? latestMessage : undefined} key={message.id} className={`conversation-entry ${message.role}`} data-state={message.failed ? "failed" : message.result?.state}><span className="conversation-speaker">{message.role === "user" ? "YOU" : "SAATHI"}</span><div className="conversation-body">{(message.result || message.failed) && <span className="conversation-outcome">{message.failed ? "Needs attention" : message.result?.state === "confirmed" ? "Store confirmed" : message.result?.state === "draft" ? "For review" : message.result?.state === "unsupported" ? "Try another request" : "Awaiting detail"}</span>}<p>{message.text}</p>
+            {message.result && !message.result.shoppingList && message.result.state !== "unsupported" && <div className={`conversation-result ${message.result.state}`}><span>{message.result.state === "confirmed" ? "VERIFIED STORE RESULT" : message.result.state === "draft" ? "DRAFT FOR REVIEW" : message.result.state === "clarify" ? "WAITING FOR YOU" : "STORE RESULT"}</span><strong>{message.result.title}</strong><small>{message.result.detail}</small></div>}
             {message.attachment && <div className="conversation-attachment">{message.attachment.kind === "image" ? <Image unoptimized src={message.attachment.url} alt={`Preview of ${message.attachment.name}`} width={64} height={64} /> : <FileText size={26} aria-hidden="true" />}<span>{message.attachment.name}</span></div>}
             {message.result?.shoppingList && <ShoppingListResult draft={message.result.shoppingList} busy={busy} inactive={inactiveDrafts.includes(message.id)} onConfirm={(draft, payment) => void confirmSale(draft, payment, message.id)} />}
             {message.result?.state === "clarify" && <span className="clarification-hint">Waiting for an opening amount · nothing saved yet</span>}
           </div></article>)}
-          {messages.length === 1 && <div className="assistant-starters"><span>START WITH A REQUEST</span><div>{examples.map((example) => <button key={example} type="button" onClick={() => void runPrompt(example)} disabled={busy}>{example}<ArrowUp size={14} aria-hidden="true" /></button>)}</div></div>}
+          {messages.length === 0 && <div className="assistant-starters"><span>OR START WITH A REQUEST</span><div>{examples.map((example) => <button key={example} type="button" onClick={() => void runPrompt(example)} disabled={busy}>{example}<ArrowUp size={14} aria-hidden="true" /></button>)}</div></div>}
           {busy && <div className="conversation-processing" role="status"><span className="processing-dot" /> {voiceState === "transcribing" ? "Transcribing with Prisma" : workingOn === "attachment" ? "Reading your list; nothing has been changed" : "Checking request and store"}</div>}
         </div>
         <div className="conversation-bottom">
@@ -277,18 +282,18 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
           <form className="assistant-composer" onSubmit={submit}><label htmlFor="assistant-input" className="sr-only">Ask Saathi</label><input id="assistant-input" value={input} onChange={(event) => setInput(event.target.value)} placeholder={pending ? "e.g. 100 rupaye" : "Ask about stock, khata or a shopping list…"} maxLength={500} disabled={busy || voiceState === "listening"} />
             <button type="button" className="assistant-attach" onClick={() => fileInput.current?.click()} disabled={busy || voiceState === "listening"} aria-label="Attach image or PDF"><Paperclip size={20} aria-hidden="true" /></button>
             <button type="button" className="assistant-camera" onClick={() => cameraInput.current?.click()} disabled={busy || voiceState === "listening"} aria-label="Take shopping list photo"><Camera size={20} aria-hidden="true" /></button>
-            <button className="assistant-mic" type="button" disabled={busy || (realVoice && !voiceAvailable)} aria-label={realVoice ? voiceState === "listening" ? "Stop recording" : "Start recording" : "Play sample voice flow"} onClick={() => void toggleVoice()}>{realVoice && voiceState === "listening" ? <Square size={17} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}</button>
+            <button className="assistant-mic" type="button" disabled={busy || (realVoice && !voiceAvailable)} aria-label={realVoice ? voiceState === "listening" ? "Stop recording" : "Start recording" : "Play sample voice flow"} onClick={() => void toggleVoice()}>{realVoice && voiceState === "listening" ? <Square size={17} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}<span>{realVoice ? voiceState === "listening" ? "Stop" : "Speak" : "Sample"}</span></button>
             <button className="assistant-send" type="submit" disabled={busy || voiceState === "listening" || (!input.trim() && !attachment)} aria-label="Send message"><ArrowUp size={19} aria-hidden="true" /></button></form>
           <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="sr-only" tabIndex={-1} onChange={(event) => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
           <input ref={cameraInput} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" tabIndex={-1} onChange={(event) => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
-          <div className="composer-meta"><span>Files are not saved by DukaanSaathi. Images are sent to the free vision provider; lists remain drafts until you confirm a sale.</span>{realVoice && <label>Voice language <select value={voiceLanguage} onChange={(event) => setVoiceLanguage(event.target.value as typeof voiceLanguage)} disabled={busy || voiceState === "listening"}><option value="hi-IN">Hindi</option><option value="en-IN">English</option></select></label>}</div>
+          <div className="composer-meta"><details><summary>Attachments &amp; privacy</summary><p>JPG, PNG, WebP or PDF, up to 5 MB. Files are not saved by DukaanSaathi. Images go to the vision provider. Lists remain drafts until you confirm a sale.</p></details>{realVoice && <label>Voice language <select value={voiceLanguage} onChange={(event) => setVoiceLanguage(event.target.value as typeof voiceLanguage)} disabled={busy || voiceState === "listening"}><option value="hi-IN">Hindi</option><option value="en-IN">English</option></select></label>}</div>
           {voiceNotice && <p className="composer-voice-notice" role="status">{voiceNotice}</p>}
           {speechUrl && <audio controls src={speechUrl} aria-label="Spoken assistant reply" className="assistant-audio" />}
         </div>
       </section>
       <aside className="assistant-context" aria-label="Action context"><div className="assistant-context-top"><span>TRUSTED ACTION</span><ShieldCheck size={19} strokeWidth={1.5} aria-hidden="true" /></div><VoiceStateIndicator state={voiceState} realVoice={realVoice} realReasoning={realReasoning} connected={connected} />
         <div className="action-surface"><p className="action-eyebrow">LATEST RESULT</p>{action ? <><h2>{action.title}</h2><span className="action-intent">{action.intent}</span><p className="action-detail">{action.detail}</p><div className="action-warning"><ShieldCheck size={17} aria-hidden="true" /><span>{action.state === "confirmed" ? "Confirmed by your store database." : action.state === "draft" ? "Draft only. Review and confirm to record a sale." : action.state === "clarify" ? "Waiting for your answer. No change saved." : "No successful change was confirmed."}</span></div></> : <><h2>Your next action starts here.</h2><p>Saathi will show the intent, store result and any decision that needs your confirmation.</p></>}</div>
-        <p className="assistant-context-note">{realReasoning ? "OpenRouter" : "Mock reasoning"} proposes the intent. Zod and owner-scoped server tools control every business action.</p>
+        <p className="assistant-context-note">{realReasoning ? "AI" : "Mock AI"} interprets your request. Your shop records decide the answer. Saathi confirms a change only when it is saved.</p>
       </aside>
     </div>
   </div>;

@@ -15,6 +15,10 @@ export const businessActionSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("customer.create"), name, phone: z.string().trim().min(6).max(20).optional() }).strict(),
   z.object({ kind: z.literal("khata.add"), customerId: uuid, type: z.enum(["gave", "received"]), amount: money.positive(), note: note.optional() }).strict(),
   z.object({ kind: z.literal("sale.record"), items: z.array(z.object({ productId: uuid, quantity: z.number().int().min(1).max(10000) }).strict()).min(1).max(30), paymentMethod: z.enum(["cash", "upi", "card"]).nullable() }).strict(),
+  z.object({ kind: z.literal("supplier.create"), name, contactName: name.optional(), phone: z.string().trim().min(6).max(20).optional() }).strict(),
+  z.object({ kind: z.literal("supplier.edit"), id: uuid, name, contactName: name.nullable(), phone: z.string().trim().min(6).max(20).nullable() }).strict(),
+  z.object({ kind: z.literal("order.createDraft"), supplierId: uuid, note: note.optional(), items: z.array(z.object({ productId: uuid, quantity: z.number().int().min(1).max(10000), unitCost: money.nullable() }).strict()).min(1).max(30) }).strict(),
+  z.object({ kind: z.literal("order.transition"), id: uuid, action: z.enum(["place", "receive", "cancel"]) }).strict(),
 ]);
 
 export type BusinessAction = z.infer<typeof businessActionSchema>;
@@ -47,3 +51,10 @@ export const saleSchema = z.object({
   payment_method: z.enum(["cash", "upi", "card"]).nullable(), created_at: z.string(),
 });
 export type Sale = z.infer<typeof saleSchema>;
+
+export const supplierSchema = z.object({ id: uuid, name, contact_name: z.string().nullable(), phone: z.string().nullable(), created_at: z.string() });
+export type Supplier = z.infer<typeof supplierSchema>;
+export const purchaseOrderSchema = z.object({ id: uuid, supplier_id: uuid, status: z.enum(["draft", "placed", "received", "cancelled"]), note: z.string().nullable(), created_at: z.string(), updated_at: z.string() });
+export type PurchaseOrder = z.infer<typeof purchaseOrderSchema>;
+export const purchaseOrderItemSchema = z.object({ id: uuid, order_id: uuid, product_id: uuid, quantity: z.number().int().positive(), unit_cost: z.coerce.number() });
+export type PurchaseOrderItem = z.infer<typeof purchaseOrderItemSchema>;

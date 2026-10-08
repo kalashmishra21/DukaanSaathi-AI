@@ -7,7 +7,9 @@ import { useBusinessMutation } from "./use-business-mutation";
 
 export function KhataWorkspace({ customers, entries, balances }: { customers: Customer[]; entries: KhataEntry[]; balances: Record<string, number> }) {
   const [selectedId, setSelectedId] = useState<string | null>(customers[0]?.id ?? null);
+  const [search, setSearch] = useState("");
   const selected = customers.find((customer) => customer.id === selectedId) ?? null;
+  const visible = customers.filter((customer) => `${customer.name} ${customer.phone ?? ""}`.toLocaleLowerCase("en-IN").includes(search.toLocaleLowerCase("en-IN")));
   const { busy, error, notice, run } = useBusinessMutation();
 
   async function addCustomer(event: FormEvent<HTMLFormElement>) {
@@ -30,7 +32,8 @@ export function KhataWorkspace({ customers, entries, balances }: { customers: Cu
     <div className="workspace-page-heading"><p className="workspace-eyebrow">KHATA / CONNECTED</p><h1>Every balance<br /><em>in context.</em></h1><p>Positive outstanding means the customer owes the shop. “Gave” adds to the balance; “Received” reduces it.</p></div>
     <div className="khata-layout">
       <section className="business-section"><div className="section-heading"><span>CUSTOMERS / {customers.length}</span></div>
-        <div className="customer-list">{customers.length ? customers.map((customer) => <button className={selected?.id === customer.id ? "customer-row selected" : "customer-row"} type="button" key={customer.id} onClick={() => setSelectedId(customer.id)} aria-pressed={selected?.id === customer.id}><span><strong>{customer.name}</strong><small>{customer.phone || "No phone saved"}</small></span><span>{rupees(balances[customer.id] ?? 0)}</span></button>) : <p className="business-muted">No customers yet.</p>}</div>
+        <label className="business-search"><span className="sr-only">Search customers</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customer or phone" /></label>
+        <div className="customer-list">{visible.length ? visible.map((customer) => <button className={selected?.id === customer.id ? "customer-row selected" : "customer-row"} type="button" key={customer.id} onClick={() => setSelectedId(customer.id)} aria-pressed={selected?.id === customer.id}><span><strong>{customer.name}</strong><small>{customer.phone || "No phone saved"}</small></span><span>{rupees(balances[customer.id] ?? 0)}</span></button>) : <p className="business-muted">{search ? "No customer matches this search." : "No customers yet."}</p>}</div>
         <div className="business-form-panel inset-form"><div className="section-heading"><span>ADD CUSTOMER</span></div><form className="business-form" onSubmit={(event) => void addCustomer(event)}><label>Name<input name="name" required maxLength={120} placeholder="Customer name" /></label><label>Phone (optional)<input name="phone" type="tel" maxLength={20} placeholder="Leave blank for demo" /></label><button className="button button-dark" disabled={busy} type="submit">Add customer</button></form></div>
       </section>
       <section className="business-section"><div className="section-heading"><span>CUSTOMER ACCOUNT</span><span>LEDGER / INR</span></div>

@@ -26,6 +26,17 @@ export class MockAIProvider implements AIProvider {
       .replace(/[०-९]/gu, (digit) => String("०१२३४५६७८९".indexOf(digit)));
 
     const openAccount = /^(.+?) ke naam se (\d+) rupaye ka naya udhaar khata bana do[.!?]?$/i.exec(text);
+    if (/^(?:low[- ]stock items? ki reorder list bana do|reorder suggestions? batao)[.!?]?$/i.test(text))
+      return reasoningResultSchema.parse({ kind: "tool_call", tool: { intent: "inventory.getReorderSuggestions", arguments: {} } });
+    if (/^(?:suppliers? (?:dikhao|batao)|supplier list)[.!?]?$/i.test(text))
+      return reasoningResultSchema.parse({ kind: "tool_call", tool: { intent: "supplier.list", arguments: {} } });
+    const newSupplier = /^(?:new supplier )(.+?) add karo[.!?]?$/i.exec(text);
+    if (newSupplier) return reasoningResultSchema.parse({ kind: "tool_call", tool: { intent: "supplier.create", arguments: { name: newSupplier[1] } } });
+    if (/^(?:open orders? dikhao|purchase orders? dikhao)[.!?]?$/i.test(text))
+      return reasoningResultSchema.parse({ kind: "tool_call", tool: { intent: "orders.getOpen", arguments: {} } });
+    const order = /^(.+?) se (.+?) ke (\d+) (?:packet|piece|unit) ka purchase order draft banao[.!?]?$/i.exec(text);
+    if (order) return reasoningResultSchema.parse({ kind: "tool_call", tool: { intent: "orders.createDraft", arguments: { supplier: order[1], items: [{ product: order[2], quantity: Number(order[3]) }] } } });
+
     if (openAccount) return reasoningResultSchema.parse({ kind: "tool_call", tool: {
       intent: "khata.openAccount", arguments: { customer: openAccount[1], amountRupees: Number(openAccount[2]) },
     } });

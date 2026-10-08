@@ -99,6 +99,38 @@ export async function POST(request: Request) {
       if (readError) return Response.json({ error: "Sale saved, but confirmation could not be loaded. Check recent sales before retrying." }, { status: 500 });
       return Response.json({ ok: true, sale: saleSchema.parse(sale) });
     }
+    case "supplier.create": {
+      const { data, error } = await client.from("suppliers").insert({
+        shop_id: shop.id, name: action.name, contact_name: action.contactName || null, phone: action.phone || null,
+      }).select("id").single();
+      if (error) return databaseError(error);
+      return Response.json({ ok: true, id: data.id });
+    }
+    case "supplier.edit": {
+      const { data, error } = await client.from("suppliers").update({
+        name: action.name, contact_name: action.contactName, phone: action.phone,
+      }).eq("id", action.id).eq("shop_id", shop.id).select("id").maybeSingle();
+      if (error) return databaseError(error);
+      if (!data) return Response.json({ error: "Supplier not found." }, { status: 404 });
+      return Response.json({ ok: true, id: data.id });
+    }
+    case "order.createDraft": {
+      if (new Set(action.items.map((item) => item.productId)).size !== action.items.length) {
+        return Response.json({ error: "Select each product only once." }, { status: 422 });
+      }
+      const { data, error } = await client.rpc("create_purchase_order", {
+        p_shop_id: shop.id, p_supplier_id: action.supplierId, p_items: action.items, p_note: action.note || null,
+      });
+      if (error) return databaseError(error);
+      return Response.json({ ok: true, id: data });
+    }
+    case "order.transition": {
+      const { data, error } = await client.rpc("transition_purchase_order", {
+        p_shop_id: shop.id, p_order_id: action.id, p_action: action.action,
+      });
+      if (error) return databaseError(error);
+      return Response.json({ ok: true, status: data });
+    }
   }
 }
 
@@ -108,7 +140,7 @@ function databaseError(error: { code?: string; message: string }) {
     return Response.json({ error: "Check the entered values and try again." }, { status: 422 });
   }
   if (error.code === "P0001") return Response.json({ error: "Insufficient stock or product unavailable." }, { status: 409 });
-  if (error.code === "P0002") return Response.json({ error: "Product not found." }, { status: 404 });
+  if (error.code === "P0002") return Response.json({ error: "A referenced product, supplier or order was not found." }, { status: 404 });
   if (error.code === "42501") return Response.json({ error: "You do not have access to this shop." }, { status: 403 });
   return Response.json({ error: "The store action could not be completed. Please try again." }, { status: 503 });
 }

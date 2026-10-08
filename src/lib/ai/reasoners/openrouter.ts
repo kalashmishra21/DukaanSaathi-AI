@@ -21,6 +21,11 @@ const tools = [
   ["clarify_openAccount", "Ask for the opening amount when a new udhaar customer or khata is requested without any amount. No customer is created yet.", parameters({ customer: field }, ["customer"])],
   ["inventory_checkList", "Read inventory and prices for a shopping list. This is a draft, never a sale.", parameters({ items: listItems }, ["items"])],
   ["sales_getDailySummary", "Read total sales for a YYYY-MM-DD date.", parameters({ date: field }, ["date"])],
+  ["inventory_getReorderSuggestions", "Read low-stock reorder quantities. This creates no order.", parameters({}, [])],
+  ["supplier_list", "Read the shop's supplier directory.", parameters({}, [])],
+  ["supplier_create", "Add a supplier when the merchant explicitly requests it.", parameters({ name: field }, ["name"])],
+  ["orders_getOpen", "Read the shop's draft and placed purchase orders.", parameters({}, [])],
+  ["orders_createDraft", "Create an INTERNAL purchase order draft for an explicitly named supplier and product quantities. Never claim supplier was contacted.", parameters({ supplier: field, items: { type: "array", minItems: 1, maxItems: 30, items: parameters({ product: field, quantity: integer }, ["product", "quantity"]) } }, ["supplier", "items"])],
 ] as const;
 
 const intentByFunction: Record<string, ToolCall["intent"]> = {
@@ -32,6 +37,11 @@ const intentByFunction: Record<string, ToolCall["intent"]> = {
   khata_openAccount: "khata.openAccount",
   inventory_checkList: "inventory.checkList",
   sales_getDailySummary: "sales.getDailySummary",
+  inventory_getReorderSuggestions: "inventory.getReorderSuggestions",
+  supplier_list: "supplier.list",
+  supplier_create: "supplier.create",
+  orders_getOpen: "orders.getOpen",
+  orders_createDraft: "orders.createDraft",
 };
 
 const completionSchema = z.object({
@@ -50,7 +60,7 @@ export class OpenRouterReasoner {
 
   async reason(input: ReasoningInput): Promise<ReasoningResult> {
     const text = z.string().trim().min(1).max(500).parse(input.text);
-    // Exact supported merchant phrases stay usable when the free model is busy.
+    // Exact supported merchant phrases use deterministic reasoning before the model.
     // The result still crosses the same Zod and trusted-tool boundary.
     const recognized = await new MockAIProvider(this.today).reason({ ...input, text });
     if (recognized.kind !== "unsupported") return reasoningResultSchema.parse(recognized);
@@ -60,7 +70,7 @@ export class OpenRouterReasoner {
       body: JSON.stringify({
         model: this.model,
         messages: [
-          { role: "system", content: `Classify one Indian retailer request into exactly one function call. Only propose a function; never claim it ran. Interpret Hindi, Hinglish and English. Today in India is ${this.today()}. Preserve the merchant's product and customer names. Convert Hindi numerals to integers. For today's sales use today's date. A new udhaar khata with a stated amount needs khata_openAccount; if amount is missing choose clarify_openAccount, never customer_create. A repayment needs khata_addEntry with type received. A shopping list needs inventory_checkList; do not record a sale. If uncertain, do not call any function.` },
+          { role: "system", content: `Classify one Indian retailer request into exactly one function call. Only propose a function; never claim it ran. Interpret Hindi, Hinglish and English. Today in India is ${this.today()}. Preserve product, customer, and supplier names. Convert Hindi numerals to integers. For today's sales use today's date. A new udhaar khata with a stated amount needs khata_openAccount; if amount is missing choose clarify_openAccount, never customer_create. A repayment needs khata_addEntry with type received. A shopping list needs inventory_checkList; do not record a sale. A reorder suggestion is a read-only inventory_getReorderSuggestions call. An order draft uses orders_createDraft only with an explicit supplier and product quantities; it does not contact the supplier. If uncertain, do not call any function.` },
           ...(input.recent ?? []).slice(-6).map((turn) => ({ role: turn.role, content: turn.text })),
           { role: "user", content: text },
         ],

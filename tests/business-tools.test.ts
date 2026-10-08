@@ -5,6 +5,7 @@ import { BusinessToolExecutor, describeToolResult, type BusinessRepository } fro
 import { executeValidatedToolCall } from "../src/server/tools/contracts";
 import { matchShoppingList } from "../src/lib/assistant/match-shopping-list";
 import { toolCallSchema } from "../src/lib/ai/types/tool-call";
+import { reorderSuggestions } from "../src/lib/business/reorder";
 
 function fakeRepository() {
   const maggiId = "11111111-1111-4111-8111-111111111112";
@@ -32,11 +33,50 @@ function fakeRepository() {
       stock -= items.reduce((sum, item) => sum + item.quantity, 0);
       return { saleId: "11111111-1111-4111-8111-111111111115", total: amount };
     },
+    async suppliers() { return [{ id: "11111111-1111-4111-8111-111111111116", name: "North Market Distributors" }]; },
+    async createSupplier() { return "11111111-1111-4111-8111-111111111117"; },
+    async reorderSuggestions() { return [{ product: "Maggi", stock, threshold: 10, quantity: Math.max(1, 20 - stock) }]; },
+    async openOrders() { return []; },
+    async createOrderDraft() { return "11111111-1111-4111-8111-111111111118"; },
   };
   return { repository, getStock: () => stock, getCustomers: () => customers, getEntries: () => entries };
 }
 
 describe("business boundary", () => {
+  it("derives reorder quantities and rejects invalid purchase orders", () => {
+    const suggestions = reorderSuggestions([{ id: "a", name: "Milk", current_stock: 3, low_stock_threshold: 5, cost_price: 20, selling_price: 25 },
+      { id: "b", name: "Tea", current_stock: 20, low_stock_threshold: 5, cost_price: null, selling_price: 10 }]);
+    expect(suggestions).toMatchObject([{ name: "Milk", quantity: 7 }]);
+    expect(businessActionSchema.safeParse({ kind: "order.createDraft", supplierId: "bad", items: [] }).success).toBe(false);
+    expect(toolCallSchema.safeParse({ intent: "orders.createDraft", arguments: { supplier: "North Market", items: [{ product: "Milk", quantity: -1 }] } }).success).toBe(false);
+  });
+
+  it("creates an internal order draft only after the trusted repository returns", async () => {
+    const fake = fakeRepository();
+    const result = await executeValidatedToolCall({ intent: "orders.createDraft", arguments: {
+      supplier: "North Market Distributors", items: [{ product: "Maggi", quantity: 10 }],
+    } }, new BusinessToolExecutor(fake.repository));
+    expect(result).toMatchObject({ ok: true, data: { itemCount: 1 } });
+    expect(describeToolResult(result).reply).toContain("No supplier was contacted");
+    expect(fake.getStock()).toBe(20);
+  });
+
+  it("never confirms an order draft after a repository failure", async () => {
+    const fake = fakeRepository();
+    fake.repository.createOrderDraft = async () => { throw new Error("Purchase order draft could not be saved."); };
+    const result = await executeValidatedToolCall({ intent: "orders.createDraft", arguments: {
+      supplier: "North Market Distributors", items: [{ product: "Maggi", quantity: 10 }],
+    } }, new BusinessToolExecutor(fake.repository));
+    expect(result.ok).toBe(false);
+    expect(describeToolResult(result).title).toBe("Action not completed");
+    expect(fake.getStock()).toBe(20);
+  });
+
+  it("rejects unknown suppliers and products without saving an order", async () => {
+    const executor = new BusinessToolExecutor(fakeRepository().repository);
+    expect(await executor.execute({ intent: "orders.createDraft", arguments: { supplier: "Missing", items: [{ product: "Maggi", quantity: 1 }] } })).toMatchObject({ ok: false });
+    expect(await executor.execute({ intent: "orders.createDraft", arguments: { supplier: "North Market Distributors", items: [{ product: "Missing", quantity: 1 }] } })).toMatchObject({ ok: false });
+  });
   it("rejects invalid product and sale input before a database call", () => {
     expect(businessActionSchema.safeParse({ kind: "product.adjust", id: "bad-id", delta: 0 }).success).toBe(false);
     expect(businessActionSchema.safeParse({ kind: "sale.record", items: [{ productId: "bad-id", quantity: -1 }], paymentMethod: "cash" }).success).toBe(false);

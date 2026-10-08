@@ -1,4 +1,4 @@
-# Architecture — Phase 6
+# Architecture
 
 DukaanSaathi is one Next.js App Router application backed by Supabase Auth and Postgres when configured. It is sized for a small challenge demo. The landing page and deterministic mock AI preview work without credentials; the connected workspace requires a signed-in shop owner.
 
@@ -31,6 +31,14 @@ Khata outstanding is derived from entries, never independently edited: `gave` ad
 `bootstrap_demo_shop()` creates one synthetic private shop after sign-in. It inserts eight products, four fictional customers, ledger history, and four sales through the same trusted stock/sale functions. Calling it again for the same owner returns the existing shop. `reset_demo_shop()` is an explicit, owner-scoped transaction that deletes only that owner's named demo shop and recreates its sample records; a failed reseed rolls back the deletion. It does not silently alter existing shops when the migration is applied. No real phone numbers or personal data are included.
 
 The default test suite has no network dependency. It tests Zod boundaries, tool confirmation behavior, money calculations, official Gnani request shapes with a fake transport, and runs the SQL migrations in embedded PostgreSQL to verify seeding, reset, ownership, direct-write restrictions, stock changes, and failed-sale rollback. Hosted Supabase and a private Gnani key are needed for live reset and voice QA.
+
+## Suppliers and purchase orders
+
+`suppliers`, `purchase_orders`, and `purchase_order_items` use the same owner RLS and composite shop foreign keys as the original business tables. Direct order/item writes are revoked. `create_purchase_order` validates a supplier, products, bounded quantities and costs in one transaction. `transition_purchase_order` locks the order row; only a placed order can be received. Receipt calls trusted stock adjustment for every line and changes status in the same transaction, preventing partial or repeated receipt. A placed status is an internal record, not a message to a supplier.
+
+Assistant contracts add `supplier.list`, `supplier.create`, `orders.getOpen`, `orders.createDraft`, and `inventory.getReorderSuggestions`. Model arguments still cross Zod and the authenticated repository. Reorder quantities target twice the low-stock threshold with at least one unit, remain suggestions, and never create an order automatically. Only the explicit Orders UI can place, cancel or receive a saved order.
+
+Inventory and customer filters derive from the fetched shop data without requests on every keystroke. Independent overview queries run concurrently; React request caching keeps the shared shop/session lookup deduplicated. Order lines are queried only for the latest 30 orders (at most 900 lines), avoiding a partial global list that could understate totals. Archived product names remain available in order history.
 
 ## Layout
 

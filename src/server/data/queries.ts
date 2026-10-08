@@ -1,7 +1,7 @@
 import "server-only";
 
 import { z } from "zod";
-import { productSchema, customerSchema, khataEntrySchema, movementSchema, saleSchema } from "@/lib/business/schemas";
+import { productSchema, customerSchema, khataEntrySchema, movementSchema, saleSchema, supplierSchema, purchaseOrderSchema, purchaseOrderItemSchema } from "@/lib/business/schemas";
 import { indiaDayBounds, khataBalance, todayInIndia, totalKhataOutstanding } from "@/lib/business/calculations";
 import type { ShopContext } from "./context";
 
@@ -39,18 +39,22 @@ export async function getKhata(context: ReadyContext) {
 export async function getSales(context: ReadyContext) {
   const [products, sales] = await Promise.all([
     context.client.from("products").select("id,name,sku,unit,selling_price,cost_price,current_stock,low_stock_threshold,created_at,updated_at").eq("shop_id", context.shop.id).is("archived_at", null).order("name"),
-    context.client.from("sales").select("id,total_amount,payment_method,created_at").eq("shop_id", context.shop.id).order("created_at", { ascending: false }).limit(20),
+    context.client.from("sales").select("id,total_amount,payment_method,created_at").eq("shop_id", context.shop.id).order("created_at", { ascending: false }).limit(100),
   ]);
   return { products: rows(productSchema, products.data, products.error), sales: rows(saleSchema, sales.data, sales.error) };
 }
 
 export async function getOverview(context: ReadyContext) {
   const { start, end } = indiaDayBounds(todayInIndia());
-  const [products, entries, sales, movements] = await Promise.all([
+  const [products, entries, sales, movements, recentSales, recentEntries, recentOrders, customers] = await Promise.all([
     context.client.from("products").select("id,name,sku,unit,selling_price,cost_price,current_stock,low_stock_threshold,created_at,updated_at").eq("shop_id", context.shop.id).is("archived_at", null),
     context.client.from("khata_entries").select("id,customer_id,type,amount,note,created_at").eq("shop_id", context.shop.id),
     context.client.from("sales").select("id,total_amount,payment_method,created_at").eq("shop_id", context.shop.id).gte("created_at", start).lt("created_at", end),
     context.client.from("inventory_movements").select("id,product_id,movement_type,quantity_delta,note,created_at").eq("shop_id", context.shop.id).order("created_at", { ascending: false }).limit(5),
+    context.client.from("sales").select("id,total_amount,payment_method,created_at").eq("shop_id", context.shop.id).order("created_at", { ascending: false }).limit(5),
+    context.client.from("khata_entries").select("id,customer_id,type,amount,note,created_at").eq("shop_id", context.shop.id).order("created_at", { ascending: false }).limit(5),
+    context.client.from("purchase_orders").select("id,supplier_id,status,note,created_at,updated_at").eq("shop_id", context.shop.id).order("updated_at", { ascending: false }).limit(5),
+    context.client.from("customers").select("id,name,phone,created_at").eq("shop_id", context.shop.id),
   ]);
   const productRows = rows(productSchema, products.data, products.error);
   const entryRows = rows(khataEntrySchema, entries.data, entries.error);
@@ -62,5 +66,35 @@ export async function getOverview(context: ReadyContext) {
     outstanding: totalKhataOutstanding(entryRows),
     recentMovements: rows(movementSchema, movements.data, movements.error),
     products: productRows,
+    recentSales: rows(saleSchema, recentSales.data, recentSales.error),
+    recentEntries: rows(khataEntrySchema, recentEntries.data, recentEntries.error),
+    recentOrders: rows(purchaseOrderSchema, recentOrders.data, recentOrders.error),
+    customers: rows(customerSchema, customers.data, customers.error),
+  };
+}
+
+export async function getSuppliers(context: ReadyContext) {
+  const { data, error } = await context.client.from("suppliers")
+    .select("id,name,contact_name,phone,created_at").eq("shop_id", context.shop.id).order("name");
+  return rows(supplierSchema, data, error);
+}
+
+export async function getOrders(context: ReadyContext) {
+  const [suppliers, products, orders] = await Promise.all([
+    context.client.from("suppliers").select("id,name,contact_name,phone,created_at").eq("shop_id", context.shop.id).order("name"),
+    context.client.from("products").select("id,name,sku,unit,selling_price,cost_price,current_stock,low_stock_threshold,created_at,updated_at,archived_at").eq("shop_id", context.shop.id).order("name"),
+    context.client.from("purchase_orders").select("id,supplier_id,status,note,created_at,updated_at").eq("shop_id", context.shop.id).order("created_at", { ascending: false }).limit(30),
+  ]);
+  const orderRows = rows(purchaseOrderSchema, orders.data, orders.error);
+  // Each order has at most 30 lines. Query the selected history, not an arbitrary
+  // global item limit that could silently understate an order's total.
+  const items = orderRows.length ? await context.client.from("purchase_order_items")
+    .select("id,order_id,product_id,quantity,unit_cost").eq("shop_id", context.shop.id)
+    .in("order_id", orderRows.map((order) => order.id)).limit(900) : { data: [], error: null };
+  return {
+    suppliers: rows(supplierSchema, suppliers.data, suppliers.error),
+    products: rows(productSchema, products.data, products.error),
+    orders: orderRows,
+    items: rows(purchaseOrderItemSchema, items.data, items.error),
   };
 }

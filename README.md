@@ -8,6 +8,10 @@ The landing page, Saathi Core, and assistant work with `AI_PROVIDER=mock` and `A
 
 ## Local setup
 
+The merchant workspace also includes a supplier directory, internal purchase order drafts, low-stock reorder suggestions, inventory/customer search, sales filters, and recent store activity. Orders move from draft to placed to received (or cancelled). Marking an order placed does not contact the supplier. Receiving goods adds stock and movements atomically; repeated receipt is rejected. The assistant can list suppliers/open orders, suggest reorders, add suppliers, and save explicitly requested order drafts. It cannot place or receive an order by model intent.
+
+The [supplier/order migration](supabase/migrations/20261008190000_suppliers_purchase_orders.sql) adds two synthetic suppliers to named demo shops and seeds them again after reset. The separate [order item index migration](supabase/migrations/20261008190256_purchase_order_items_shop_index.sql) covers shop-scoped reads. Apply each once, in timestamp order, for a new project; the supplier/order migration is already live in the DukaanSaathi project. Order history shows the latest 30 orders; sales history shows the latest 100 sales.
+
 Requires Node.js 20.9+ and npm. Run `npm install`, then `npm run dev`. The app uses [http://localhost:3100](http://localhost:3100). Without Supabase variables, landing and mock preview work while the workspace shows a clear setup state.
 
 For real store data:

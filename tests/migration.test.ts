@@ -6,6 +6,8 @@ const migration = readFileSync("supabase/migrations/20261007000100_initial_busin
 const hardeningMigration = readFileSync("supabase/migrations/20261008071313_hardening_indexes.sql", "utf8");
 const demoMigration = readFileSync("supabase/migrations/20261008090000_demo_shop_reset.sql", "utf8");
 const assistantMigration = readFileSync("supabase/migrations/20261008160000_assistant_open_khata.sql", "utf8");
+const ordersMigration = readFileSync("supabase/migrations/20261008190000_suppliers_purchase_orders.sql", "utf8");
+const orderIndexMigration = readFileSync("supabase/migrations/20261008190256_purchase_order_items_shop_index.sql", "utf8");
 const userId = "11111111-1111-4111-8111-111111111111";
 const otherId = "22222222-2222-4222-8222-222222222222";
 
@@ -27,6 +29,15 @@ describe("Supabase migration in local PostgreSQL", () => {
       await db.exec(hardeningMigration);
       await db.exec(demoMigration);
       await db.exec(assistantMigration);
+      await db.exec(ordersMigration);
+      await db.exec(orderIndexMigration);
+      const orderItemShopIndex = await db.query<{ exists: boolean }>(`
+        select exists (
+          select 1 from pg_indexes
+          where schemaname = 'public' and indexname = 'purchase_order_items_shop_id_idx'
+        )
+      `);
+      expect(orderItemShopIndex.rows[0].exists).toBe(true);
       const hardening = await db.query<{ function_executable: boolean; index_count: number }>(`
         select
           has_function_privilege('authenticated', 'public.create_profile_for_user()', 'EXECUTE') as function_executable,
@@ -59,6 +70,36 @@ describe("Supabase migration in local PostgreSQL", () => {
           (select sum(case when type = 'gave' then amount else -amount end) from public.khata_entries where shop_id = '${shopId}') outstanding
       `);
       expect(seeded.rows[0]).toEqual({ products: 8, customers: 4, sales: 4, movements: 18, entries: 9, low_stock: 2, outstanding: "770.00" });
+      const supplier = await db.query<{ id: string }>(`select id from public.suppliers where shop_id = '${shopId}' and name = 'North Market Distributors'`);
+      expect(supplier.rows).toHaveLength(1);
+      const milk = await db.query<{ id: string; current_stock: number }>(`select id,current_stock from public.products where shop_id = '${shopId}' and name = 'Amul Milk'`);
+      const order = await db.query<{ create_purchase_order: string }>(`select public.create_purchase_order('${shopId}', '${supplier.rows[0].id}', '[{"productId":"${milk.rows[0].id}","quantity":12,"unitCost":null}]'::jsonb, 'QA reorder')`);
+      const orderId = order.rows[0].create_purchase_order;
+      const draftStock = await db.query<{ current_stock: number }>(`select current_stock from public.products where id = '${milk.rows[0].id}'`);
+      expect(draftStock.rows[0].current_stock).toBe(milk.rows[0].current_stock);
+      await expect(db.query(`select public.transition_purchase_order('${shopId}', '${orderId}', 'receive')`)).rejects.toThrow();
+      await db.query(`select public.transition_purchase_order('${shopId}', '${orderId}', 'place')`);
+      await db.query(`select public.transition_purchase_order('${shopId}', '${orderId}', 'receive')`);
+      const received = await db.query<{ current_stock: number; movements: number; status: string }>(`
+        select p.current_stock, (select count(*)::integer from public.inventory_movements where product_id = p.id and note = 'Purchase order ${orderId}') movements,
+          (select status from public.purchase_orders where id = '${orderId}') status from public.products p where p.id = '${milk.rows[0].id}'
+      `);
+      expect(received.rows[0]).toEqual({ current_stock: milk.rows[0].current_stock + 12, movements: 1, status: "received" });
+      await expect(db.query(`select public.transition_purchase_order('${shopId}', '${orderId}', 'receive')`)).rejects.toThrow();
+      await expect(db.query(`select public.create_purchase_order('${shopId}', '${supplier.rows[0].id}', '[{"productId":"${milk.rows[0].id}","quantity":0,"unitCost":null}]'::jsonb, null)`)).rejects.toThrow();
+      const countOrders = await db.query<{ count: number }>(`select count(*)::integer count from public.purchase_orders where shop_id = '${shopId}'`);
+      expect(countOrders.rows[0].count).toBe(1);
+      await expect(db.query(`insert into public.purchase_orders(shop_id,supplier_id) values ('${shopId}', '${supplier.rows[0].id}')`)).rejects.toThrow();
+      await expect(db.query(`update public.purchase_orders set status = 'draft' where id = '${orderId}'`)).rejects.toThrow();
+      await db.exec(`set request.jwt.claim.sub = '${otherId}';`);
+      for (const table of ["suppliers", "purchase_orders", "purchase_order_items"]) {
+        const hidden = await db.query<{ count: number }>(`select count(*)::integer count from public.${table} where shop_id = '${shopId}'`);
+        expect(hidden.rows[0].count).toBe(0);
+      }
+      await expect(db.query(`select public.transition_purchase_order('${shopId}', '${orderId}', 'cancel')`)).rejects.toThrow();
+      await db.exec(`set request.jwt.claim.sub = '';`);
+      await expect(db.query(`select public.transition_purchase_order('${shopId}', '${orderId}', 'receive')`)).rejects.toThrow();
+      await db.exec(`set request.jwt.claim.sub = '${userId}';`);
       const opened = await db.query<{ open_khata_account: string }>(`select public.open_khata_account('${shopId}', 'Nandini', 100)`);
       const account = await db.query<{ entries: number; balance: string }>(`
         select count(*)::integer entries, sum(case when type = 'gave' then amount else -amount end) balance
@@ -111,6 +152,9 @@ describe("Supabase migration in local PostgreSQL", () => {
       await db.exec(`set request.jwt.claim.sub = '${otherId}';`);
       const hidden = await db.query<{ count: number }>(`select count(*)::integer as count from public.products where shop_id = '${resetShopId}'`);
       expect(hidden.rows[0].count).toBe(0);
+      const hiddenSuppliers = await db.query<{ count: number }>(`select count(*)::integer count from public.suppliers where shop_id = '${resetShopId}'`);
+      expect(hiddenSuppliers.rows[0].count).toBe(0);
+      await expect(db.query(`select public.create_purchase_order('${resetShopId}', '${supplier.rows[0].id}', '[]'::jsonb, null)`)).rejects.toThrow();
       await expect(db.query(`select public.reset_demo_shop()`)).rejects.toThrow();
       await expect(db.query(`select public.adjust_stock('${resetShopId}', (select id from public.products where shop_id = '${resetShopId}' limit 1), 1, 'Cross shop')`)).rejects.toThrow();
       await expect(db.query(`select public.open_khata_account('${resetShopId}', 'Unauthorized', 50)`)).rejects.toThrow();

@@ -6,6 +6,9 @@ import { matchShoppingList, type CatalogProduct } from "../../lib/assistant/matc
 export type ProductRecord = CatalogProduct;
 export type CustomerRecord = { id: string; name: string };
 export type LedgerRecord = { type: "gave" | "received"; amount: number };
+export type SupplierRecord = { id: string; name: string };
+export type ReorderRecord = { product: string; stock: number; threshold: number; quantity: number };
+export type OpenOrderRecord = { id: string; supplier: string; status: "draft" | "placed"; items: string[] };
 
 export interface BusinessRepository {
   products(): Promise<ProductRecord[]>;
@@ -17,6 +20,11 @@ export interface BusinessRepository {
   addEntry(customerId: string, type: "gave" | "received", amount: number, note?: string): Promise<void>;
   dailySales(date: string): Promise<{ total: number; count: number }>;
   recordSale(items: { productId: string; quantity: number }[], paymentMethod: "cash" | "upi" | "card"): Promise<{ saleId: string; total: number }>;
+  suppliers(): Promise<SupplierRecord[]>;
+  createSupplier(name: string): Promise<string>;
+  reorderSuggestions(): Promise<ReorderRecord[]>;
+  openOrders(): Promise<OpenOrderRecord[]>;
+  createOrderDraft(supplierId: string, items: { productId: string; quantity: number }[]): Promise<string>;
 }
 
 function matchByName<T extends { name: string }>(records: T[], rawName: string): T | null {
@@ -86,6 +94,37 @@ export class BusinessToolExecutor implements TrustedToolExecutor {
           const summary = await this.repository.dailySales(call.arguments.date);
           return { ok: true, data: { intent: call.intent, date: call.arguments.date, ...summary } };
         }
+        case "inventory.getReorderSuggestions": {
+          const suggestions = await this.repository.reorderSuggestions();
+          return { ok: true, data: { intent: call.intent, suggestions } };
+        }
+        case "supplier.list": {
+          const suppliers = await this.repository.suppliers();
+          return { ok: true, data: { intent: call.intent, suppliers } };
+        }
+        case "supplier.create": {
+          const existing = matchByName(await this.repository.suppliers(), call.arguments.name);
+          if (existing) return { ok: false, error: "A supplier with that name already exists." };
+          const id = await this.repository.createSupplier(call.arguments.name);
+          return { ok: true, data: { intent: call.intent, supplier: call.arguments.name, id } };
+        }
+        case "orders.getOpen": {
+          const orders = await this.repository.openOrders();
+          return { ok: true, data: { intent: call.intent, orders } };
+        }
+        case "orders.createDraft": {
+          const [suppliers, products] = await Promise.all([this.repository.suppliers(), this.repository.products()]);
+          const supplier = matchByName(suppliers, call.arguments.supplier);
+          if (!supplier) return { ok: false, error: "Supplier not found. Add the supplier first." };
+          const items = call.arguments.items.map((item) => {
+            const product = matchByName(products, item.product);
+            if (!product) throw new Error(`Product not found: ${item.product}.`);
+            return { productId: product.id, quantity: item.quantity };
+          });
+          if (new Set(items.map((item) => item.productId)).size !== items.length) return { ok: false, error: "The order repeats a product." };
+          const id = await this.repository.createOrderDraft(supplier.id, items);
+          return { ok: true, data: { intent: call.intent, supplier: supplier.name, itemCount: items.length, id } };
+        }
       }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "The business action failed." };
@@ -125,6 +164,22 @@ export function describeToolResult(result: ToolExecutionResult): { title: string
       return { title: data.type === "received" ? "Payment recorded" : "Udhaar recorded", detail: `${data.customer} · ${rupees(Number(data.balance))} outstanding`, reply: `${data.type === "received" ? "Payment of" : "New udhaar of"} ${rupees(Number(data.amount))} was recorded. ${data.customer}'s outstanding balance is now ${rupees(Number(data.balance))}.` };
     case "sales.getDailySummary":
       return { title: "Sales summary", detail: `${data.date} · ${rupees(Number(data.total))}`, reply: `Sales on ${data.date} total ${rupees(Number(data.total))} across ${data.count} sale(s).` };
+    case "inventory.getReorderSuggestions": {
+      const suggestions = data.suggestions as ReorderRecord[];
+      return { title: "Reorder suggestions", detail: `${suggestions.length} low-stock product(s)`, reply: suggestions.length ? `Consider reordering ${suggestions.map((item) => `${item.quantity} ${item.product}`).join(", ")}. These are suggestions; no order was created.` : "No product is below its reorder threshold." };
+    }
+    case "supplier.list": {
+      const suppliers = data.suppliers as SupplierRecord[];
+      return { title: "Suppliers", detail: `${suppliers.length} in your directory`, reply: suppliers.length ? `Your suppliers are ${suppliers.map((item) => item.name).join(", ")}.` : "No suppliers are saved yet. Add one in Suppliers." };
+    }
+    case "supplier.create":
+      return { title: "Supplier added", detail: String(data.supplier), reply: `${data.supplier} was added to your supplier directory.` };
+    case "orders.getOpen": {
+      const orders = data.orders as OpenOrderRecord[];
+      return { title: "Open purchase orders", detail: `${orders.length} draft or placed`, reply: orders.length ? `You have ${orders.length} open purchase order(s): ${orders.map((item) => `${item.supplier} (${item.status})`).join(", ")}.` : "There are no open purchase orders." };
+    }
+    case "orders.createDraft":
+      return { title: "Purchase order drafted", detail: `${data.supplier} · ${data.itemCount} product(s)`, reply: `An internal purchase order draft for ${data.supplier} was saved. No supplier was contacted and stock was not changed.` };
     default:
       throw new Error("Unknown authoritative tool result.");
   }
