@@ -5,9 +5,9 @@ import { AudioLines, Check, CornerDownRight } from "lucide-react";
 
 const samples = [
   { phrase: "Maggi ke 20 packet add kar do.", intent: "inventory.adjust", detail: "Maggi · +20 packets", note: "Structured preview. Stock is not updated." },
-  { phrase: "Sharma ji ka kitna udhaar hai?", intent: "khata.getBalance", detail: "Customer · Sharma ji", note: "A connected ledger is needed for a real balance." },
-  { phrase: "Aaj ki total sale batao.", intent: "future sales request", detail: "Daily sales summary", note: "This scenario is planned; no sales data is connected." },
-  { phrase: "Low-stock items ki reorder list bana do.", intent: "future inventory request", detail: "Reorder suggestions", note: "This scenario is planned; no stock data is connected." },
+  { phrase: "Sharma ji ka kitna udhaar hai?", intent: "khata.getBalance", detail: "Customer · Sharma ji", note: "The signed-in assistant reads the connected ledger." },
+  { phrase: "Aaj ki total sale batao.", intent: "sales.getDailySummary", detail: "Daily sales summary", note: "The signed-in assistant reads actual sales for today." },
+  { phrase: "Low-stock items ki reorder list bana do.", intent: "future inventory request", detail: "Reorder suggestions", note: "Reorder suggestions are planned for a later phase." },
 ];
 
 export function LandingVoiceDemo() {

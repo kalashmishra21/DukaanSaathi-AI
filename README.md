@@ -1,38 +1,26 @@
 # DukaanSaathi AI
 
-A voice-first AI copilot for Indian kirana stores and small retailers. The project is being built for the Gnani AI internship competition, with a focus on inventory, khata, and sales through natural conversation.
+A voice-first AI copilot for Indian kirana stores and small retailers, built for the Gnani AI internship competition. It combines a premium Next.js workspace with mock Hindi/Hinglish intent recognition and trusted store operations.
 
-## Current status
+## Current scope
 
-Phase 2 adds a responsive landing page with the original 3D Saathi Core, a merchant workspace at `/app`, and an interactive mock assistant at `/app/assistant`. The assistant demonstrates deterministic inventory and khata requests through the local mock provider. Its action cards are previews: no inventory or khata data is stored or changed. The other workspace sections establish navigation and layout only.
-
-The foundation includes a typed AI provider interface, Zod tool-call schemas, and trusted server-tool contracts. The Saathi Core uses a lightweight static fallback on mobile, when reduced motion is preferred, or when WebGL is unavailable.
-
-**Real Gnani Prisma, Evon, and Timbre integrations are not enabled. No Gnani credits are used in mock mode.** Supabase, authentication, and production business tools are also future work.
+The landing page, Saathi Core, and assistant work without paid AI services. With a Supabase project configured, a signed-in shop owner can add, edit and archive products, adjust stock, manage customer khata, record sales, and view a data-derived overview. The mock assistant recognizes a small set of deterministic phrases and sends validated intents to server tools. **Gnani Prisma, Evon and Timbre are not connected, and no Gnani credits are used.** Orders, real speech input, and production deployment are later work.
 
 ## Local setup
 
-Requires Node.js 20.9 or newer and npm.
+Requires Node.js 20.9+ and npm. Run `npm install`, then `npm run dev`. The app uses [http://localhost:3100](http://localhost:3100). Without Supabase variables, landing and mock preview work while the workspace shows a clear setup state.
 
-```bash
-npm install
-cp .env.example .env.local
-npm run dev
-```
+For real store data:
 
-On Windows PowerShell, use `Copy-Item .env.example .env.local` in place of `cp`. The environment file is optional for mock mode because `AI_PROVIDER=mock` is the default. Open `http://localhost:3100`. Both `npm run dev` and `npm start` use port 3100.
+1. Create a Supabase project. Copy its project URL and **public anon/publishable key** into a local `.env.local` using the names in [`.env.example`](.env.example). Never use a service-role key in the browser or commit credentials.
+2. Run [the initial SQL migration](supabase/migrations/20261007000100_initial_business.sql), then [the hardening migration](supabase/migrations/20261008071313_hardening_indexes.sql), in the Supabase SQL Editor. They create tables, RLS policies, atomic stock and sale functions, an opt-in synthetic demo seed, and supporting indexes.
+3. In Supabase Authentication URL settings, set the site URL to `http://localhost:3100` and allow `http://localhost:3100/auth/callback` as a redirect URL. Enable email/password sign-in. A hosted project may require email confirmation before first sign-in.
+4. Start or restart the app, create an account or sign in at `/signin`, then choose **Create demo shop** in the workspace. This action seeds one private, repeatable synthetic shop for your account.
+
+The seed contains fictional products and customers and no phone numbers. The seed function is idempotent for the same owner and shop name. No service-role key is required.
 
 ## Checks
 
-```bash
-npm run lint
-npm run typecheck
-npm test
-npm run build
-```
+`npm run lint`, `npm run typecheck`, `npm test`, and `npm run build` are the code checks. The default tests are offline; an embedded PostgreSQL test runs the SQL migration and verifies RLS, stock operations, and sale rollback without a Supabase account. A live Supabase browser flow still requires your own project configuration.
 
-## Technology direction
-
-Next.js, React, TypeScript, Tailwind CSS, React Three Fiber, Three.js, Zod, and Vitest form the current application. Later phases may add Supabase for data and authentication, Gnani Prisma for transcription, Evon for reasoning, and Timbre for speech. The current microphone control demonstrates voice states without recording audio. All live integrations require separate implementation and verification.
-
-The tool flow and trust rules are in [docs/architecture.md](docs/architecture.md). Visual decisions are governed by [DESIGN.md](DESIGN.md).
+Architecture and trust rules: [docs/architecture.md](docs/architecture.md). Visual rules: [DESIGN.md](DESIGN.md).

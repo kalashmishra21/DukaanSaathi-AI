@@ -3,9 +3,6 @@ import { notFound } from "next/navigation";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 
 const sections = {
-  inventory: { title: "Inventory", phrase: "Know what is on the shelf.", detail: "Stock adjustments and low-stock prompts will live here when a trusted inventory tool and store database are connected.", example: "Maggi ke 20 packet add kar do." },
-  khata: { title: "Khata", phrase: "Every balance in context.", detail: "Customer ledgers and entries will appear after identity, permissions, and trusted data are in place.", example: "Sharma ji ka kitna udhaar hai?" },
-  sales: { title: "Sales", phrase: "See the story of the day.", detail: "Verified daily summaries and trends will become available once sales records are connected.", example: "Aaj ki total sale batao." },
   orders: { title: "Orders", phrase: "A clear path from need to reorder.", detail: "Order planning and fulfillment are reserved for a later phase. No order can be placed from this preview.", example: "Low-stock items ki reorder list bana do." },
 } as const;
 

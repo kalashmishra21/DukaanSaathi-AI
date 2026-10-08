@@ -6,7 +6,7 @@ const quantity = z.number().int().positive();
 export const toolCallSchema = z.discriminatedUnion("intent", [
   z.object({
     intent: z.literal("inventory.adjust"),
-    arguments: z.object({ product: name, delta: z.number().int().refine((value) => value !== 0) }).strict(),
+    arguments: z.object({ product: name, delta: z.number().int().min(-100000).max(100000).refine((value) => value !== 0) }).strict(),
   }).strict(),
   z.object({
     intent: z.literal("inventory.getStock"),
@@ -18,7 +18,7 @@ export const toolCallSchema = z.discriminatedUnion("intent", [
   }).strict(),
   z.object({
     intent: z.literal("khata.addEntry"),
-    arguments: z.object({ customer: name, amountRupees: quantity, note: name.optional() }).strict(),
+    arguments: z.object({ customer: name, amountRupees: quantity.max(10000000), note: name.optional() }).strict(),
   }).strict(),
   z.object({
     intent: z.literal("sales.getDailySummary"),

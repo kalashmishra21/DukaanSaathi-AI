@@ -21,6 +21,13 @@ describe("MockAIProvider", () => {
     });
   });
 
+  it("returns a date-scoped sales intent from the mock phrase", async () => {
+    const fixed = new MockAIProvider(() => "2026-10-07");
+    await expect(fixed.reason({ text: "Aaj ki total sale batao" })).resolves.toEqual({
+      kind: "tool_call", tool: { intent: "sales.getDailySummary", arguments: { date: "2026-10-07" } },
+    });
+  });
+
   it("rejects invalid structured output", () => {
     expect(() => reasoningResultSchema.parse({
       kind: "tool_call",

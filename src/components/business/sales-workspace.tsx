@@ -1,0 +1,47 @@
+"use client";
+
+import { useState, type FormEvent } from "react";
+import { salePreviewTotal, rupees } from "@/lib/business/calculations";
+import type { Product, Sale } from "@/lib/business/schemas";
+import { useBusinessMutation } from "./use-business-mutation";
+
+type Line = { productId: string; quantity: number };
+
+export function SalesWorkspace({ products, sales }: { products: Product[]; sales: Sale[] }) {
+  const available = products.filter((product) => product.current_stock > 0);
+  const [items, setItems] = useState<Line[]>(available[0] ? [{ productId: available[0].id, quantity: 1 }] : []);
+  const [payment, setPayment] = useState<"cash" | "upi" | "card">("cash");
+  const [confirmedTotal, setConfirmedTotal] = useState<number | null>(null);
+  const { busy, error, notice, run } = useBusinessMutation();
+  const exceedsShownStock = items.some((item) => item.quantity > (products.find((product) => product.id === item.productId)?.current_stock ?? 0));
+  let preview = 0;
+  try { preview = salePreviewTotal(items, products); } catch { preview = 0; }
+
+  async function saveSale(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setConfirmedTotal(null);
+    if (!items.length || new Set(items.map((item) => item.productId)).size !== items.length) return;
+    const result = await run({ kind: "sale.record", items, paymentMethod: payment }, "Sale recorded and stock reduced.");
+    if (result && result.sale && typeof result.sale === "object" && "total_amount" in result.sale) {
+      setConfirmedTotal(Number(result.sale.total_amount));
+    }
+  }
+
+  return <div className="business-page">
+    <div className="workspace-page-heading"><p className="workspace-eyebrow">SALES / CONNECTED</p><h1>Make every sale<br /><em>count.</em></h1><p>Prices and totals are confirmed by the database. Stock falls only when the whole sale succeeds.</p></div>
+    <div className="business-columns">
+      <section className="business-section"><div className="section-heading"><span>NEW SALE</span><span>INR</span></div>
+        {available.length ? <form className="business-form" onSubmit={(event) => void saveSale(event)}>
+          <div className="sale-lines">{items.map((item, index) => <div className="sale-line" key={index}><label>Product<select value={item.productId} onChange={(event) => setItems((current) => current.map((line, i) => i === index ? { ...line, productId: event.target.value } : line))}>{available.map((product) => <option key={product.id} value={product.id}>{product.name} · {rupees(product.selling_price)} · {product.current_stock} left</option>)}</select></label><label>Quantity<input type="number" min="1" step="1" value={item.quantity} onChange={(event) => setItems((current) => current.map((line, i) => i === index ? { ...line, quantity: Number(event.target.value) } : line))} required /></label><button className="line-remove" type="button" aria-label={`Remove line ${index + 1}`} onClick={() => setItems((current) => current.filter((_, i) => i !== index))}>Remove</button></div>)}</div>
+          <button className="text-button" type="button" onClick={() => setItems((current) => [...current, { productId: available.find((p) => !current.some((line) => line.productId === p.id))?.id ?? available[0].id, quantity: 1 }])} disabled={items.length >= available.length}>+ Add another product</button>
+          <label>Payment method<select value={payment} onChange={(event) => setPayment(event.target.value as typeof payment)}><option value="cash">Cash</option><option value="upi">UPI</option><option value="card">Card</option></select></label>
+          <div className="sale-total"><span>ESTIMATED TOTAL</span><strong>{rupees(preview)}</strong><small>Final price and stock are checked again by the database.</small></div>
+          {exceedsShownStock && <p className="form-error" role="alert">Requested quantity exceeds the stock shown. The database will check again before saving.</p>}
+          <button className="button button-copper" type="submit" disabled={busy || !items.length || items.some((item) => item.quantity < 1) || new Set(items.map((item) => item.productId)).size !== items.length}>{busy ? "Recording…" : "Record sale"}</button>
+        </form> : <p className="business-muted">Add a product with available stock before recording a sale.</p>}
+        {notice && <p className="form-notice" role="status">{notice}{confirmedTotal !== null ? ` Confirmed total: ${rupees(confirmedTotal)}.` : ""}</p>}{error && <p className="form-error" role="alert">{error}</p>}
+      </section>
+      <section className="business-section"><div className="section-heading"><span>RECENT SALES / {sales.length}</span></div>{sales.length ? <ul className="sale-history">{sales.map((sale) => <li key={sale.id}><span><strong>{new Date(sale.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</strong><small>{sale.payment_method?.toUpperCase() || "PAYMENT NOT SET"}</small></span><strong>{rupees(sale.total_amount)}</strong></li>)}</ul> : <p className="business-muted">No sales recorded yet.</p>}</section>
+    </div>
+  </div>;
+}

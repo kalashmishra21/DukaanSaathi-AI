@@ -12,8 +12,8 @@ export function describeMockTurn(result: ReasoningResult): MockTurn {
     return {
       title: "Not available in this mock",
       intent: "unsupported",
-      detail: "The current mock has two deterministic example requests.",
-      reply: "I can preview the Maggi stock adjustment and Sharma ji balance request. This request is planned for a later phase.",
+      detail: "The request is outside the deterministic mock vocabulary.",
+      reply: "I can understand the sample stock, khata and sales phrases shown here. Please try one of those examples.",
     };
   }
 
