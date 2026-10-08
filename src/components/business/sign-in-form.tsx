@@ -1,41 +1,145 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
+import type { ZodIssue } from "zod";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { signInSchema, signUpSchema } from "@/lib/auth/validation";
+
+type Mode = "signin" | "signup";
+type Field = "fullName" | "email" | "password" | "confirmPassword";
+type FieldErrors = Partial<Record<Field, string>>;
+
+function fieldErrors(issues: ZodIssue[]): FieldErrors {
+  const errors: FieldErrors = {};
+  for (const issue of issues) {
+    const field = issue.path[0] as Field | undefined;
+    if (field && !errors[field]) errors[field] = issue.message;
+  }
+  return errors;
+}
+
+function authMessage(reason: unknown): string {
+  const message = reason instanceof Error ? reason.message : "";
+  if (/invalid login credentials/i.test(message)) return "Email or password is incorrect.";
+  if (/user already registered/i.test(message)) return "An account with this email already exists. Sign in instead.";
+  if (/email not confirmed/i.test(message)) return "Please confirm your email before signing in.";
+  if (/password should be/i.test(message)) return "Choose a stronger password and try again.";
+  return "We couldn't complete that request. Please try again.";
+}
 
 export function SignInForm() {
   const router = useRouter();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<Mode>("signin");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [visible, setVisible] = useState({ password: false, confirmPassword: false });
+
+  function switchMode(next: Mode) {
+    if (busy || next === mode) return;
+    setMode(next);
+    setNotice("");
+    setError("");
+    setErrors({});
+    setVisible({ password: false, confirmPassword: false });
+  }
+
+  function clearField(field: Field) {
+    setErrors((current) => ({ ...current, [field]: undefined }));
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true); setError(""); setNotice("");
+    setError("");
+    setNotice("");
     const form = new FormData(event.currentTarget);
-    const email = String(form.get("email") || "").trim();
-    const password = String(form.get("password") || "");
+    const values = {
+      fullName: String(form.get("fullName") || ""),
+      email: String(form.get("email") || ""),
+      password: String(form.get("password") || ""),
+      confirmPassword: String(form.get("confirmPassword") || ""),
+    };
+    const parsed = mode === "signin" ? signInSchema.safeParse(values) : signUpSchema.safeParse(values);
+    if (!parsed.success) {
+      setErrors(fieldErrors(parsed.error.issues));
+      return;
+    }
+    setErrors({});
     const client = createSupabaseBrowserClient();
-    if (!client) { setError("Supabase is not configured."); setBusy(false); return; }
+    if (!client) {
+      setError("Sign in is unavailable because Supabase is not configured.");
+      return;
+    }
+
+    setBusy(true);
     try {
       if (mode === "signin") {
-        const { error: authError } = await client.auth.signInWithPassword({ email, password });
+        const { error: authError } = await client.auth.signInWithPassword({ email: parsed.data.email, password: parsed.data.password });
         if (authError) throw authError;
         router.replace("/app");
         router.refresh();
       } else {
+        const signup = signUpSchema.parse(values);
         const { data, error: authError } = await client.auth.signUp({
-          email, password, options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+          email: signup.email,
+          password: signup.password,
+          options: { data: { display_name: signup.fullName }, emailRedirectTo: `${window.location.origin}/auth/callback` },
         });
         if (authError) throw authError;
         if (data.session) { router.replace("/app"); router.refresh(); }
-        else setNotice("Check your email for the confirmation link, then return to sign in.");
+        else setNotice("Check your email for a confirmation link, then return to sign in.");
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Authentication failed.");
-    } finally { setBusy(false); }
+      setError(authMessage(reason));
+    } finally {
+      setBusy(false);
+    }
   }
-  return <><div className="auth-tabs" role="group" aria-label="Account action"><button type="button" aria-pressed={mode === "signin"} onClick={() => setMode("signin")}>Sign in</button><button type="button" aria-pressed={mode === "signup"} onClick={() => setMode("signup")}>Create account</button></div><form className="business-form auth-form" onSubmit={(event) => void submit(event)}><label>Email<input type="email" name="email" autoComplete="email" required /></label><label>Password<input type="password" name="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} minLength={6} required /></label><button className="button button-copper" disabled={busy} type="submit">{busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}</button></form>{notice && <p className="form-notice" role="status">{notice}</p>}{error && <p className="form-error" role="alert">{error}</p>}<p className="auth-footnote">Your shop records are private to your account. Email confirmation may be required by your Supabase project.</p></>;
+
+  function field(name: Field, label: string, input: ReactNode) {
+    return <div className="auth-field" key={name}>
+      <label htmlFor={`auth-${name}`}>{label}</label>
+      {input}
+      {errors[name] && <span className="auth-field-error" id={`auth-${name}-error`} role="alert">{errors[name]}</span>}
+    </div>;
+  }
+
+  function passwordField(name: "password" | "confirmPassword", label: string) {
+    const shown = visible[name];
+    return field(name, label, <div className="auth-password-field">
+      <input id={`auth-${name}`} name={name} type={shown ? "text" : "password"}
+        autoComplete={name === "password" && mode === "signin" ? "current-password" : "new-password"}
+        aria-invalid={Boolean(errors[name])} aria-describedby={errors[name] ? `auth-${name}-error` : undefined}
+        onInput={() => clearField(name)} />
+      <button type="button" className="auth-visibility" aria-label={`${shown ? "Hide" : "Show"} ${label.toLowerCase()}`}
+        aria-pressed={shown} onClick={() => setVisible((current) => ({ ...current, [name]: !shown }))}>
+        {shown ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+      </button>
+    </div>);
+  }
+
+  return <>
+    <h2 id="auth-title">{mode === "signin" ? "Welcome back." : "Create your account."}</h2>
+    <div className="auth-tabs" role="group" aria-label="Account action">
+      <button type="button" aria-pressed={mode === "signin"} disabled={busy} onClick={() => switchMode("signin")}>Sign in</button>
+      <button type="button" aria-pressed={mode === "signup"} disabled={busy} onClick={() => switchMode("signup")}>Create account</button>
+    </div>
+    <form key={mode} className="business-form auth-form" noValidate onSubmit={(event) => void submit(event)}>
+      {mode === "signup" && field("fullName", "Full name", <input id="auth-fullName" name="fullName" type="text" autoComplete="name"
+        aria-invalid={Boolean(errors.fullName)} aria-describedby={errors.fullName ? "auth-fullName-error" : undefined}
+        onInput={() => clearField("fullName")} />)}
+      {field("email", "Email", <input id="auth-email" name="email" type="email" autoComplete="email" inputMode="email"
+        aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? "auth-email-error" : undefined}
+        onInput={() => clearField("email")} />)}
+      {passwordField("password", "Password")}
+      {mode === "signup" && passwordField("confirmPassword", "Confirm password")}
+      <button className="button button-copper" disabled={busy} type="submit">{busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}</button>
+    </form>
+    {notice && <p className="form-notice" role="status">{notice}</p>}
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <p className="auth-footnote">Your shop records are private to your account. Email confirmation may be required by your Supabase project.</p>
+  </>;
 }
