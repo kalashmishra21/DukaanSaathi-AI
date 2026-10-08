@@ -28,8 +28,8 @@
 .core-panel[data-rendered="true"] .core-fallback-body { animation: none; }
 .core-fallback-orbit { position: absolute; inset: 10px; border: 1px solid #d0a777; border-radius: 50%; transform: rotate(-24deg) scaleY(.57); }
 .core-fallback-orbit.orbit-two { transform: rotate(50deg) scaleY(.74); border-color: #aaa995; }
-.core-fallback-body { width: 172px; height: 172px; position: absolute; left: 54px; top: 54px; display: grid; place-items: center; border-radius: 30%; transform: rotate(28deg); border: 1px solid #ead0a1; background: linear-gradient(130deg, #d5b17b 3%, #8b704f 48%, #dfc69b); box-shadow: inset 10px 8px 35px #fff5d37d, 18px 28px 36px #090e0a66; animation: core-breathe 6s ease-in-out infinite; }
-.core-fallback-body span { width: 88px; height: 88px; border: 1px solid #fff3d0a8; border-radius: 26%; }
+.core-fallback-body { width: 172px; height: 172px; position: absolute; left: 54px; top: 54px; display: grid; place-items: center; clip-path: polygon(31% 0, 75% 3%, 100% 35%, 89% 82%, 57% 100%, 14% 88%, 0 53%, 12% 18%); transform: rotate(7deg); border: 1px solid #ead0a1; background: linear-gradient(130deg, #e7ca99 3%, #94714f 48%, #d4ae77); box-shadow: inset 10px 8px 35px #fff5d37d, 18px 28px 36px #090e0a66; }
+.core-fallback-body span { width: 88px; height: 88px; border: 1px solid #fff3d0a8; clip-path: polygon(30% 0, 72% 5%, 100% 40%, 85% 84%, 45% 100%, 0 65%, 8% 25%); }
 .core-canvas { position: absolute; inset: 0; z-index: 1; }
 .core-canvas-fallback { position: absolute; inset: 0; }
 .core-concept { position: absolute; z-index: 2; color: #e6dcc9; background: #273129e8; border: 1px solid #6b7465; padding: 8px 12px; min-width: 68px; text-align: center; font-size: 11px; letter-spacing: .06em; pointer-events: none; }

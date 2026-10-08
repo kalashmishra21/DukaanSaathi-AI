@@ -291,10 +291,10 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
           {speechUrl && <audio controls src={speechUrl} aria-label="Spoken assistant reply" className="assistant-audio" />}
         </div>
       </section>
-      <aside className="assistant-context" aria-label="Action context"><div className="assistant-context-top"><span>TRUSTED ACTION</span><ShieldCheck size={19} strokeWidth={1.5} aria-hidden="true" /></div><VoiceStateIndicator state={voiceState} realVoice={realVoice} realReasoning={realReasoning} connected={connected} />
+      {(action || voiceState !== "idle") && <aside className="assistant-context" aria-label="Action context"><div className="assistant-context-top"><span>TRUSTED ACTION</span><ShieldCheck size={19} strokeWidth={1.5} aria-hidden="true" /></div><VoiceStateIndicator state={voiceState} realVoice={realVoice} realReasoning={realReasoning} connected={connected} />
         <div className="action-surface"><p className="action-eyebrow">LATEST RESULT</p>{action ? <><h2>{action.title}</h2><span className="action-intent">{action.intent}</span><p className="action-detail">{action.detail}</p><div className="action-warning"><ShieldCheck size={17} aria-hidden="true" /><span>{action.state === "confirmed" ? "Confirmed by your store database." : action.state === "draft" ? "Draft only. Review and confirm to record a sale." : action.state === "clarify" ? "Waiting for your answer. No change saved." : "No successful change was confirmed."}</span></div></> : <><h2>Your next action starts here.</h2><p>Saathi will show the intent, store result and any decision that needs your confirmation.</p></>}</div>
         <p className="assistant-context-note">{realReasoning ? "AI" : "Mock AI"} interprets your request. Your shop records decide the answer. Saathi confirms a change only when it is saved.</p>
-      </aside>
+      </aside>}
     </div>
   </div>;
 }

@@ -13,6 +13,12 @@
 - **Whitespace:** allow large, confident margins. Group by proximity before adding containers.
 - **Typography:** use an expressive editorial serif for major statements and a precise sans serif for controls and body copy. Hindi and other Indian language text must have a readable fallback. Keep body copy at least 16 px where reading is primary.
 
+## Workspace themes
+
+Light and dark are equal operating modes. Light uses warm ivory reading surfaces and charcoal type; dark uses layered charcoal and warm ivory type, never pure black. Copper identifies attention and decisions; emerald identifies verified positive states. Use semantic workspace tokens for surfaces, text, borders, fields, and status so every route changes coherently. Translucency belongs only on elevated chrome or a focused overlay. Theme selection persists, follows the system until chosen, and applies before the first paint.
+
+Operational pages use compact editorial titles and place the first useful control within the initial mobile viewport. Preserve tabular numerals for stock, money, and counts. Mobile directories become readable cards or panes rather than squeezed desktop tables.
+
 ## Spacing and shape
 
 Use an 8 px rhythm, with 4 px adjustments for dense controls. Larger sections should breathe at 64–112 px on desktop and 48–72 px on mobile. Use small radii (roughly 8–12 px) for controls and panels; reserve round forms for the Saathi Core and meaningful voice states. Avoid a page made of countless pill-shaped cards.
@@ -21,13 +27,13 @@ Use an 8 px rhythm, with 4 px adjustments for dense controls. Larger sections sh
 
 Hierarchy should be immediately readable: one main action or message per region. Reveal detail only when it helps the next decision. Voice activity needs a visible text state and a clear retry path. Motion should explain listening, thinking, tool execution, or navigation; it should be smooth, restrained, and absent when reduced motion is requested. No constant distracting animation.
 
-## Future landing experience
+## Landing experience
 
-Build a cinematic **Saathi Core** in a later phase: a central intelligence object that changes visibly between listening, thinking, and action. Inventory, ₹, khata, and analytics concepts may orbit or interact with it when they clarify the story. Scroll-led transitions should be controlled. Mobile gets a lightweight fallback. Readability and speed always take priority over 3D.
+The cinematic **Saathi Core** is a faceted central intelligence object that changes visibly between listening, thinking, and action. Its initial fallback and settled 3D form share the same angular character. Inventory, ₹, khata, and analytics concepts may orbit or interact with it when they clarify the story. Scroll-led transitions should be controlled. Mobile gets a lightweight fallback. Readability and speed always take priority over 3D.
 
-## Future workspace
+## Workspace
 
-Navigation will cover Overview, Assistant, Inventory, Khata, Sales, and Orders. The assistant should feel like a focused AI command center, with context and verified action results, rather than a WhatsApp clone.
+Navigation covers Overview, Assistant, Inventory, Khata, Sales, Suppliers, and Orders. The assistant should feel like a focused AI command center, with context and verified action results, rather than a WhatsApp clone.
 
 Design distinct voice states: idle, listening, transcribing, reasoning, executing action, speaking, and error/retry. Show the active state in words as well as motion or color. A suggested tool action must look different from a confirmed result.
 

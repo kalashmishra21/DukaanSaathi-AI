@@ -5,6 +5,7 @@ import "./landing.css";
 import "./workspace.css";
 import "./assistant.css";
 import "./business.css";
+import "./phase9.css";
 
 const manrope = localFont({
   src: "../../node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2",
@@ -28,7 +29,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" data-scroll-behavior="smooth" className={`${manrope.variable} ${newsreader.variable}`}>
+    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning className={`${manrope.variable} ${newsreader.variable}`}>
+      <head><script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('dukaansaathi-theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}catch(e){document.documentElement.dataset.theme=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}` }} /></head>
       <body>{children}</body>
     </html>
   );

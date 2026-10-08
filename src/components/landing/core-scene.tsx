@@ -17,22 +17,22 @@ function CoreObject({ mode }: { mode: CoreMode }) {
   useFrame(({ pointer }, delta) => {
     if (!body.current || !shell.current) return;
     elapsed.current += Math.min(delta, 0.05);
-    const speed = mode === "thinking" ? 0.35 : mode === "listening" ? 0.16 : 0.09;
+    const speed = mode === "thinking" ? 0.28 : mode === "listening" ? 0.11 : mode === "action" ? 0.08 : 0;
     body.current.rotation.y += Math.min(delta, 0.05) * speed;
     body.current.rotation.x += (pointer.y * 0.12 - body.current.rotation.x) * Math.min(delta * 2, 1);
     body.current.rotation.z += (pointer.x * 0.1 - body.current.rotation.z) * Math.min(delta * 2, 1);
-    body.current.position.y = Math.sin(elapsed.current * 0.65) * 0.055;
+    body.current.position.y = mode === "idle" ? 0 : Math.sin(elapsed.current * 0.65) * 0.035;
     shell.current.color.lerp(mode === "action" ? emerald : mode === "listening" ? ivory : copper, Math.min(delta * 2, 1));
   });
 
   return (
     <group ref={body}>
       <mesh>
-        <icosahedronGeometry args={[1.18, 2]} />
+        <icosahedronGeometry args={[1.18, 0]} />
         <meshStandardMaterial ref={shell} color="#d2a66e" metalness={0.58} roughness={0.34} flatShading />
       </mesh>
       <mesh scale={1.025}>
-        <icosahedronGeometry args={[1.18, 2]} />
+        <icosahedronGeometry args={[1.18, 0]} />
         <meshBasicMaterial color="#fff4dc" wireframe transparent opacity={0.2} />
       </mesh>
       <mesh rotation={[0.55, 0.12, 0.1]}>
@@ -58,13 +58,14 @@ function CoreObject({ mode }: { mode: CoreMode }) {
   );
 }
 
-export default function CoreScene({ mode }: { mode: CoreMode }) {
+export default function CoreScene({ mode, onReady }: { mode: CoreMode; onReady: () => void }) {
   return (
     <Canvas
       aria-hidden="true"
       camera={{ position: [0, 0, 5.2], fov: 48 }}
       dpr={[1, 1.5]}
       gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
+      onCreated={() => requestAnimationFrame(onReady)}
       fallback={<span className="core-canvas-fallback" aria-hidden="true" />}
     >
       <ambientLight intensity={1.8} />

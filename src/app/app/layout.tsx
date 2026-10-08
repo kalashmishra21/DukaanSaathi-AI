@@ -5,6 +5,7 @@ import { ArrowUpRight, AudioLines } from "lucide-react";
 import { Suspense } from "react";
 import { WorkspaceNav } from "@/components/layout/workspace-nav";
 import { SignOutButton } from "@/components/layout/sign-out-button";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { getShopContext } from "@/server/data/context";
 import { readProviderConfig } from "@/lib/env/config";
 
@@ -38,7 +39,7 @@ async function WorkspaceLayoutData({ children }: Readonly<{ children: React.Reac
         <div className="workspace-sidebar-bottom"><span className="workspace-voice-glyph"><AudioLines size={22} strokeWidth={1.5} aria-hidden="true" /></span><strong>{demo ? "Demo shop connected" : connected ? "Store connected" : "Saathi is ready"}</strong><p>{connected ? realReasoning ? "Store data is live. Demo phrases are deterministic; others use OpenRouter." : "Store data is live. Reasoning uses the mock provider." : "Connect a shop to enable trusted business actions."}</p></div>
       </aside>
       <div className="workspace-content">
-        <header className="workspace-topbar"><div><span className="workspace-topbar-mark" /><span>{connected ? context.shop.name : "WORKSPACE SETUP"}</span><span className="workspace-topbar-separator">/</span><span className="workspace-topbar-secondary">{demo ? "SYNTHETIC DEMO DATA" : connected ? "STORE DATA" : "NO STORE CONNECTED"}</span></div><div className="workspace-topbar-actions"><Link href="/">View website <ArrowUpRight size={16} aria-hidden="true" /></Link>{(connected || context.kind === "no-shop") && <SignOutButton />}</div></header>
+        <header className="workspace-topbar"><div><span className="workspace-topbar-mark" /><span>{connected ? context.shop.name : "WORKSPACE SETUP"}</span><span className="workspace-topbar-separator">/</span><span className="workspace-topbar-secondary">{demo ? "SYNTHETIC DEMO DATA" : connected ? "STORE DATA" : "NO STORE CONNECTED"}</span></div><div className="workspace-topbar-actions"><ThemeToggle /><Link href="/">View website <ArrowUpRight size={16} aria-hidden="true" /></Link>{(connected || context.kind === "no-shop") && <SignOutButton />}</div></header>
         <main className="workspace-main">{children}</main>
       </div>
     </div>

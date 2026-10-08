@@ -17,6 +17,7 @@ const modes: { id: CoreMode; label: string; description: string }[] = [
 export function SaathiCore() {
   const [mode, setMode] = useState<CoreMode>("idle");
   const [canRender, setCanRender] = useState(false);
+  const [rendered, setRendered] = useState(false);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 760px), (prefers-reduced-motion: reduce)");
@@ -30,6 +31,7 @@ export function SaathiCore() {
         webgl = false;
       }
       setCanRender(!media.matches && !lowMemory && webgl);
+      if (media.matches || lowMemory || !webgl) setRendered(false);
     };
     update();
     media.addEventListener("change", update);
@@ -39,7 +41,7 @@ export function SaathiCore() {
   const currentMode = modes.find((item) => item.id === mode) ?? modes[0];
 
   return (
-    <div className="core-panel" data-mode={mode}>
+    <div className="core-panel" data-mode={mode} data-rendered={rendered}>
       <div className="core-panel-top"><span>THE SAATHI CORE</span><span>INTERACTIVE STUDY / 01</span></div>
       <div className="core-stage" role="img" aria-label={`Saathi Core visual state: ${currentMode.label}. ${currentMode.description}.`}>
         <div className="core-fallback" aria-hidden="true">
@@ -47,7 +49,7 @@ export function SaathiCore() {
           <div className="core-fallback-orbit orbit-two" />
           <div className="core-fallback-body"><span /></div>
         </div>
-        {canRender && <div className="core-canvas"> <CoreScene mode={mode} /> </div>}
+        {canRender && <div className="core-canvas"> <CoreScene mode={mode} onReady={() => setRendered(true)} /> </div>}
         <span className="core-concept concept-inventory">Inventory</span>
         <span className="core-concept concept-khata">Khata</span>
         <span className="core-concept concept-sales">Sales</span>
