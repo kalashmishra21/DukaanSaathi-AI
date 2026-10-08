@@ -10,7 +10,7 @@
 .workspace-nav a[aria-current="page"]::before { content: ""; position: absolute; left: 17px; width: 2px; height: 21px; background: var(--copper); }
 .workspace-sidebar-bottom { margin-top: auto; border-top: 1px solid var(--border-dark); padding: 24px 10px 0; }
 .workspace-voice-glyph { display: grid; place-items: center; width: 38px; height: 38px; color: var(--copper); border: 1px solid #7b765f; margin-bottom: 13px; }
-.workspace-sidebar-bottom strong { font-family: Georgia, serif; font-size: 18px; font-weight: 400; }
+.workspace-sidebar-bottom strong { font-family: var(--font-editorial); font-size: 18px; font-weight: 400; }
 .workspace-sidebar-bottom p { margin: 7px 0 0; color: #a8b3a6; font-size: 12px; line-height: 1.5; }
 .workspace-content { min-width: 0; }
 .workspace-topbar { min-height: 66px; padding: 15px clamp(24px, 3.5vw, 58px); display: flex; justify-content: space-between; align-items: center; gap: 18px; border-bottom: 1px solid var(--border-light); background: #f6f4ee; }
@@ -20,19 +20,19 @@
 .workspace-topbar a { display: inline-flex; align-items: center; gap: 9px; white-space: nowrap; font-size: 12px; font-weight: 700; }
 .workspace-topbar a:hover { color: var(--copper-deep); }
 .workspace-main { width: min(100%, 1460px); margin: 0 auto; padding: clamp(34px, 4vw, 65px) clamp(24px, 3.5vw, 58px) 75px; }
-.workspace-page-heading h1 { font-size: clamp(53px, 5.5vw, 82px); line-height: 1; letter-spacing: -.063em; margin: 15px 0 21px; }
+.workspace-page-heading h1 { font-size: clamp(58px, 5.5vw, 86px); line-height: 1; letter-spacing: -.04em; margin: 15px 0 21px; }
 .workspace-page-heading h1 em { color: #a16b3d; }
 .workspace-page-heading > p:last-child { max-width: 610px; color: var(--muted-on-light); font-size: 15px; line-height: 1.65; margin-bottom: 0; }
 
 .overview-spotlight { margin-top: 45px; min-height: 358px; background: #26332a; color: var(--paper); display: grid; grid-template-columns: 1fr .7fr; overflow: hidden; }
 .overview-spotlight-copy { padding: clamp(30px, 4vw, 58px); position: relative; z-index: 1; }
 .overview-spotlight-kicker { display: inline-flex; align-items: center; gap: 9px; color: #e1bc88; font-size: 10px; font-weight: 700; letter-spacing: .13em; }
-.overview-spotlight h2 { max-width: 520px; font-size: clamp(37px, 3.7vw, 56px); line-height: 1.07; letter-spacing: -.055em; margin: 26px 0 16px; }
+.overview-spotlight h2 { max-width: 520px; font-size: clamp(41px, 3.7vw, 60px); line-height: 1.07; letter-spacing: -.03em; margin: 26px 0 16px; }
 .overview-spotlight p { max-width: 480px; color: #c1cbc0; font-size: 14px; line-height: 1.55; margin-bottom: 24px; }
 .overview-orbit { display: grid; place-items: center; min-height: 340px; position: relative; overflow: hidden; }
 .overview-orbit::before, .overview-orbit::after { content: ""; position: absolute; width: 355px; height: 355px; border: 1px solid #ad9771; border-radius: 50%; transform: rotate(-27deg) scaleY(.54); }
 .overview-orbit::after { transform: rotate(58deg) scaleY(.62); border-color: #687b68; }
-.overview-orbit > div { width: 190px; height: 190px; display: grid; place-content: center; gap: 5px; border-radius: 35%; background: #d1ae79; color: #1d241e; box-shadow: inset 10px 12px 32px #f7e0af, 12px 15px 40px #0c130d; transform: rotate(-12deg); text-align: center; font-family: Georgia, serif; font-size: 20px; }
+.overview-orbit > div { width: 190px; height: 190px; display: grid; place-content: center; gap: 5px; border-radius: 35%; background: #d1ae79; color: #1d241e; box-shadow: inset 10px 12px 32px #f7e0af, 12px 15px 40px #0c130d; transform: rotate(-12deg); text-align: center; font-family: var(--font-editorial); font-size: 20px; }
 .overview-orbit span { display: inline-block; }
 .overview-lower { display: grid; grid-template-columns: 1fr 1fr; gap: 17px; margin-top: 17px; }
 .overview-readiness { min-height: 242px; padding: 29px; background: #e6e9dd; }
@@ -45,7 +45,7 @@
 .overview-muted-action { color: #7b694e; font-size: 10px; font-weight: 700; letter-spacing: .1em; }
 
 .workspace-page-loading { min-height: 260px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; color: #26342b; }
-.workspace-page-loading strong { font-family: Georgia, serif; font-size: clamp(27px, 4vw, 42px); font-weight: 400; letter-spacing: -.04em; }
+.workspace-page-loading strong { font-family: var(--font-editorial); font-size: clamp(27px, 4vw, 42px); font-weight: 400; letter-spacing: -.04em; }
 .workspace-page-loading p { margin: 9px 0 0; color: #617165; font-size: 14px; }
 .workspace-loading-line { display: block; width: 46px; height: 2px; margin-bottom: 24px; background: #ae8353; }
 

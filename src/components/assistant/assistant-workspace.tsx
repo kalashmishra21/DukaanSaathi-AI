@@ -15,7 +15,7 @@ import { VoiceStateIndicator } from "./voice-state-indicator";
 import { ShoppingListResult } from "./shopping-list-result";
 
 type AttachmentPreview = { name: string; kind: "image" | "pdf"; url: string };
-type Message = { id: number; role: "user" | "assistant"; text: string; attachment?: AttachmentPreview; result?: AssistantResponse };
+type Message = { id: number; role: "user" | "assistant"; text: string; attachment?: AttachmentPreview; result?: AssistantResponse; failed?: boolean };
 type ProviderMode = "mock" | "gnani";
 type ReasonerMode = "mock" | "openrouter";
 type RecentTurn = z.infer<typeof recentTurnSchema>;
@@ -53,6 +53,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   const [voiceNotice, setVoiceNotice] = useState("");
   const [speechUrl, setSpeechUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [workingOn, setWorkingOn] = useState<"request" | "attachment" | "voice">("request");
   const [lastPrompt, setLastPrompt] = useState("");
   const [retryable, setRetryable] = useState(false);
   const [action, setAction] = useState<AssistantResponse | null>(null);
@@ -86,7 +87,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   async function showTurn(turn: AssistantResponse) {
     setAction(turn);
     setPending(turn.pending ?? null);
-    addMessage({ role: "assistant", text: turn.reply, result: turn });
+    addMessage({ role: "assistant", text: turn.reply, result: turn, failed: turn.state === "failed" });
     if (turn.state === "confirmed") router.refresh();
     if (turn.speech) {
       const url = `data:${turn.speech.mimeType};base64,${turn.speech.data}`;
@@ -104,6 +105,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
 
   async function processPrompt(text: string, speak: boolean) {
     setBusy(true);
+    setWorkingOn(speak ? "voice" : "request");
     setLastPrompt(text);
     setRetryable(false);
     setInput("");
@@ -126,7 +128,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
       const message = reason instanceof Error ? reason.message : "The request could not be verified. Check store records before retrying.";
       setVoiceState("error");
       setRetryable(message.includes("Nothing was changed"));
-      addMessage({ role: "assistant", text: message });
+      addMessage({ role: "assistant", text: message, failed: true });
     } finally {
       setBusy(false);
     }
@@ -147,6 +149,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   async function processAttachment() {
     if (!attachment || busy) return;
     setBusy(true);
+    setWorkingOn("attachment");
     setAction(null);
     setVoiceNotice("");
     setRetryable(false);
@@ -164,7 +167,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
       await showTurn(await readTurn(response));
     } catch (reason) {
       setVoiceState("error");
-      addMessage({ role: "assistant", text: reason instanceof Error ? reason.message : "The attachment could not be checked. No stock was changed." });
+      addMessage({ role: "assistant", text: reason instanceof Error ? reason.message : "The attachment could not be checked. No stock was changed.", failed: true });
     } finally {
       setBusy(false);
     }
@@ -173,6 +176,8 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   async function confirmSale(draft: ShoppingDraft, paymentMethod: "cash" | "upi" | "card", draftMessageId: number) {
     if (busy || !draft.canConfirm || inactiveDrafts.includes(draftMessageId)) return;
     setBusy(true);
+    setAction(null);
+    setWorkingOn("request");
     setInactiveDrafts((current) => [...current, draftMessageId]);
     addMessage({ role: "user", text: `Confirm and record this basket · ${paymentMethod.toUpperCase()}` });
     try {
@@ -184,7 +189,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
       await showTurn(await readTurn(response));
     } catch (reason) {
       setVoiceState("error");
-      addMessage({ role: "assistant", text: reason instanceof Error ? reason.message : "Sale confirmation was not verified. Check Sales before trying again." });
+      addMessage({ role: "assistant", text: reason instanceof Error ? reason.message : "Sale confirmation was not verified. Check Sales before trying again.", failed: true });
     } finally {
       setBusy(false);
     }
@@ -257,13 +262,13 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
       <section className="conversation-panel" aria-label="Assistant conversation">
         <div className="conversation-head"><div><span className="conversation-head-mark"><AudioLines size={20} strokeWidth={1.5} aria-hidden="true" /></span><div><strong>Conversation</strong><span>{connected ? "Connected shop · verified results" : "Preview · connect a shop to act"}</span></div></div><span>THIS SESSION</span></div>
         <div className="conversation-feed" aria-live="polite">
-          {messages.map((message) => <article key={message.id} className={`conversation-entry ${message.role}`}><span className="conversation-speaker">{message.role === "user" ? "YOU" : "SAATHI"}</span><div className="conversation-body"><p>{message.text}</p>
+          {messages.map((message) => <article key={message.id} className={`conversation-entry ${message.role}`} data-state={message.failed ? "failed" : message.result?.state}><span className="conversation-speaker">{message.role === "user" ? "YOU" : "SAATHI"}</span><div className="conversation-body">{(message.result || message.failed) && <span className="conversation-outcome">{message.failed ? "Needs attention" : message.result?.state === "confirmed" ? "Store confirmed" : message.result?.state === "draft" ? "For review" : "Awaiting detail"}</span>}<p>{message.text}</p>
             {message.attachment && <div className="conversation-attachment">{message.attachment.kind === "image" ? <Image unoptimized src={message.attachment.url} alt={`Preview of ${message.attachment.name}`} width={64} height={64} /> : <FileText size={26} aria-hidden="true" />}<span>{message.attachment.name}</span></div>}
             {message.result?.shoppingList && <ShoppingListResult draft={message.result.shoppingList} busy={busy} inactive={inactiveDrafts.includes(message.id)} onConfirm={(draft, payment) => void confirmSale(draft, payment, message.id)} />}
             {message.result?.state === "clarify" && <span className="clarification-hint">Waiting for an opening amount · nothing saved yet</span>}
           </div></article>)}
           {messages.length === 1 && <div className="assistant-starters"><span>START WITH A REQUEST</span><div>{examples.map((example) => <button key={example} type="button" onClick={() => void runPrompt(example)} disabled={busy}>{example}<ArrowUp size={14} aria-hidden="true" /></button>)}</div></div>}
-          {busy && <div className="conversation-processing"><span className="processing-dot" /> {voiceState === "transcribing" ? "Transcribing with Prisma" : attachment ? "Reading your list" : "Checking request and store"}</div>}
+          {busy && <div className="conversation-processing" role="status"><span className="processing-dot" /> {voiceState === "transcribing" ? "Transcribing with Prisma" : workingOn === "attachment" ? "Reading your list; nothing has been changed" : "Checking request and store"}</div>}
         </div>
         <div className="conversation-bottom">
           {pending && <div className="pending-clarification" role="status"><ShieldCheck size={17} aria-hidden="true" /><span>Opening {pending.customer}&apos;s khata · enter the opening amount to continue.</span><button type="button" onClick={() => setPending(null)} aria-label="Cancel this khata request"><X size={16} aria-hidden="true" /></button></div>}

@@ -5,7 +5,8 @@ const icons = { idle: CircleDot, listening: Mic, transcribing: ScanText, reasoni
 
 export function VoiceStateIndicator({ state, realVoice = false, realReasoning = false, connected = false }: { state: VoiceState; realVoice?: boolean; realReasoning?: boolean; connected?: boolean }) {
   const Icon = icons[state];
-  const detail = realVoice && state === "listening" ? "Microphone is recording. Stop when finished."
+  const detail = realVoice && state === "idle" ? "Type a request, attach a list or use the microphone."
+    : realVoice && state === "listening" ? "Microphone is recording. Stop when finished."
     : realVoice && state === "transcribing" ? "Gnani Prisma is turning speech into text."
     : realVoice && state === "speaking" ? "Gnani Timbre is playing the verified reply."
     : realReasoning && state === "reasoning" ? "OpenRouter is selecting a structured intent."

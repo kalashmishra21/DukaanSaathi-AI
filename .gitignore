@@ -30,4 +30,7 @@ yarn-error.log*
 .vercel
 .playwright-cli/
 .agents/
+.codex/
+.impeccable/
+.uipro/
 skills-lock.json

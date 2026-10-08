@@ -44,7 +44,9 @@ export async function POST(request: Request) {
     if (textResult.data.trim()) items = parseTextShoppingList(textResult.data);
     if (images.length) {
       if (!process.env.OPENROUTER_API_KEY?.trim()) return Response.json({ error: "Image reading is not configured. Text PDFs can still be checked." }, { status: 503 });
-      const vision = new OpenRouterVisionExtractor(process.env.OPENROUTER_API_KEY, readProviderConfig().OPENROUTER_VISION_MODEL);
+      const visionConfig = readProviderConfig();
+      const vision = new OpenRouterVisionExtractor(process.env.OPENROUTER_API_KEY, visionConfig.OPENROUTER_VISION_MODEL,
+        fetch, visionConfig.OPENROUTER_VISION_FALLBACK_MODELS);
       items = [...items, ...await vision.extract(images)];
     }
     const result = await executeValidatedToolCall({ intent: "inventory.checkList", arguments: { items } },
@@ -53,8 +55,8 @@ export async function POST(request: Request) {
     const draft = shoppingDraftSchema.parse((result.data as { draft: unknown }).draft);
     return Response.json({ state: "draft", intent: "inventory.checkList", ...describeToolResult(result), shoppingList: draft });
   } catch (error) {
-    const message = error instanceof Error && /^(Vision model|The vision model|The list repeats)/.test(error.message)
+    const message = error instanceof Error && /^(Vision model|Vision providers|The vision model|The list repeats)/.test(error.message)
       ? error.message : "The list could not be read safely. Check the file and try again.";
-    return Response.json({ error: message }, { status: 422 });
+    return Response.json({ error: message }, { status: message.startsWith("Vision providers") ? 503 : 422 });
   }
 }
