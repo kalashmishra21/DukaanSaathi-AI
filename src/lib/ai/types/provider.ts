@@ -2,6 +2,7 @@ import type { ReasoningResult } from "./tool-call";
 
 export type TranscriptionInput = {
   audio: Uint8Array;
+  mimeType?: string;
   languageHint?: string;
   mockTranscript?: string;
 };

@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 const providerConfigSchema = z.object({
-  AI_PROVIDER: z.literal("mock").default("mock"),
+  AI_PROVIDER: z.enum(["mock", "gnani"]).default("mock"),
+  GNANI_API_KEY: z.string().optional(),
 });
 
 export type ProviderConfig = z.infer<typeof providerConfigSchema>;

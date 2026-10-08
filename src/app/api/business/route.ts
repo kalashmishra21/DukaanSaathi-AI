@@ -24,6 +24,13 @@ export async function POST(request: Request) {
   if (context.kind !== "ready") return Response.json({ error: "Create your demo shop first." }, { status: 409 });
   const { client, shop } = context;
 
+  if (action.kind === "shop.reset") {
+    if (shop.name !== "DukaanSaathi Demo Mart") return Response.json({ error: "Only the demo shop can be reset." }, { status: 403 });
+    const { data, error } = await client.rpc("reset_demo_shop");
+    if (error) return databaseError(error);
+    return Response.json({ ok: true, shopId: data });
+  }
+
   switch (action.kind) {
     case "product.create": {
       const { data, error } = await client.rpc("create_product", {

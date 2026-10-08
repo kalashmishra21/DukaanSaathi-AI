@@ -13,6 +13,14 @@
 .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid #d9ded3; color: #6f624c; font-size: 10px; font-weight: 700; letter-spacing: .13em; }
 .section-heading a, .section-heading button { color: #3e6849; font-size: 11px; letter-spacing: 0; border: 0; background: transparent; font-weight: 700; }
 .business-muted { color: #69756c; line-height: 1.5; font-size: 14px; margin: 22px 0 0; }
+.demo-reset { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 16px; margin-top: 24px; padding: 20px 24px; border: 1px solid #d9ded3; background: #f5f2e9; }
+.demo-reset > div:first-child { max-width: 620px; }
+.demo-reset strong { color: #9a6b3e; font-size: 10px; letter-spacing: .14em; }
+.demo-reset p { margin: 8px 0 0; color: #57665a; font-size: 12px; line-height: 1.5; }
+.demo-reset-confirm { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; width: 100%; }
+.demo-reset-confirm label { flex-basis: 100%; color: #516154; font-size: 12px; font-weight: 700; }
+.demo-reset-confirm input { min-height: 42px; padding: 8px 11px; border: 1px solid #aebdad; background: #fffefa; }
+.demo-reset-confirm .button { min-height: 42px; }
 .table-scroll { overflow-x: auto; }
 .business-table { width: 100%; border-collapse: collapse; text-align: left; min-width: 610px; }
 .business-table th { padding: 19px 12px 12px 0; color: #788377; font-size: 10px; letter-spacing: .12em; font-weight: 700; }

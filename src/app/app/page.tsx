@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { ConnectionState } from "@/components/business/connection-state";
+import { DemoShopReset } from "@/components/business/demo-shop-reset";
 import { rupees } from "@/lib/business/calculations";
 import { getShopContext } from "@/server/data/context";
 import { getOverview } from "@/server/data/queries";
@@ -20,5 +21,6 @@ export default async function Overview() {
       </div>
       <div className="overview-spotlight"><div className="overview-spotlight-copy"><span className="overview-spotlight-kicker">A FASTER WAY TO ACT</span><h2>Ask Saathi in your own words.</h2><p>Try a stock adjustment or balance question. Only confirmed database results are presented as completed actions.</p><Link className="button button-copper" href="/app/assistant">Open Assistant <ArrowUpRight size={17} aria-hidden="true" /></Link></div><div className="overview-orbit" aria-hidden="true"><div><span>stock</span><span>khata</span><span>sales</span></div></div></div>
       <section className="business-section"><div className="section-heading"><span>RECENT STOCK ACTIVITY</span><Link href="/app/inventory">View inventory →</Link></div>{data.recentMovements.length ? <ul className="activity-list">{data.recentMovements.map((movement) => <li key={movement.id}><span>{data.products.find((product) => product.id === movement.product_id)?.name ?? "Product"}</span><span>{movement.movement_type}</span><strong>{movement.quantity_delta > 0 ? "+" : ""}{movement.quantity_delta}</strong></li>)}</ul> : <p className="business-muted">No movements recorded yet.</p>}</section>
+      {context.shop.name === "DukaanSaathi Demo Mart" && <DemoShopReset />}
     </div>;
 }

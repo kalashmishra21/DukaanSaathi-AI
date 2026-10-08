@@ -7,6 +7,7 @@ const uuid = z.uuid();
 
 export const businessActionSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("shop.seed") }).strict(),
+  z.object({ kind: z.literal("shop.reset") }).strict(),
   z.object({ kind: z.literal("product.create"), name, sku: z.string().trim().max(60).optional(), unit: name, sellingPrice: money, costPrice: money.optional(), threshold: z.number().int().min(0).max(100000), openingStock: z.number().int().min(0).max(100000) }).strict(),
   z.object({ kind: z.literal("product.edit"), id: uuid, name, sku: z.string().trim().max(60).optional(), unit: name, sellingPrice: money, costPrice: money.nullable(), threshold: z.number().int().min(0).max(100000) }).strict(),
   z.object({ kind: z.literal("product.adjust"), id: uuid, delta: z.number().int().min(-100000).max(100000).refine((n) => n !== 0), note: note.optional() }).strict(),

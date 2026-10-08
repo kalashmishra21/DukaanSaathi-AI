@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {};
+// Keep the production output separate from the active development cache.
+const nextConfig: NextConfig = {
+  distDir: process.env.NODE_ENV === "production" ? ".next-prod" : ".next",
+};
 
 export default nextConfig;

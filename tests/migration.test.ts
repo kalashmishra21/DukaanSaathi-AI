@@ -4,6 +4,7 @@ import { PGlite } from "@electric-sql/pglite";
 
 const migration = readFileSync("supabase/migrations/20261007000100_initial_business.sql", "utf8");
 const hardeningMigration = readFileSync("supabase/migrations/20261008071313_hardening_indexes.sql", "utf8");
+const demoMigration = readFileSync("supabase/migrations/20261008090000_demo_shop_reset.sql", "utf8");
 const userId = "11111111-1111-4111-8111-111111111111";
 const otherId = "22222222-2222-4222-8222-222222222222";
 
@@ -23,6 +24,7 @@ describe("Supabase migration in local PostgreSQL", () => {
       `);
       await db.exec(migration);
       await db.exec(hardeningMigration);
+      await db.exec(demoMigration);
       const hardening = await db.query<{ function_executable: boolean; index_count: number }>(`
         select
           has_function_privilege('authenticated', 'public.create_profile_for_user()', 'EXECUTE') as function_executable,
@@ -44,14 +46,18 @@ describe("Supabase migration in local PostgreSQL", () => {
       const shopId = first.rows[0].bootstrap_demo_shop;
       const again = await db.query<{ bootstrap_demo_shop: string }>("select public.bootstrap_demo_shop()");
       expect(again.rows[0].bootstrap_demo_shop).toBe(shopId);
-      const seeded = await db.query<{ products: number; customers: number; sales: number }>(`
+      const seeded = await db.query<{ products: number; customers: number; sales: number; movements: number; entries: number; low_stock: number; outstanding: string }>(`
         select
           (select count(*)::integer from public.products where shop_id = '${shopId}') products,
           (select count(*)::integer from public.customers where shop_id = '${shopId}') customers,
-          (select count(*)::integer from public.sales where shop_id = '${shopId}') sales
+          (select count(*)::integer from public.sales where shop_id = '${shopId}') sales,
+          (select count(*)::integer from public.inventory_movements where shop_id = '${shopId}') movements,
+          (select count(*)::integer from public.khata_entries where shop_id = '${shopId}') entries,
+          (select count(*)::integer from public.products where shop_id = '${shopId}' and current_stock <= low_stock_threshold) low_stock,
+          (select sum(case when type = 'gave' then amount else -amount end) from public.khata_entries where shop_id = '${shopId}') outstanding
       `);
-      expect(seeded.rows[0]).toEqual({ products: 5, customers: 3, sales: 1 });
-      const newProduct = await db.query<{ create_product: string }>(`select public.create_product('${shopId}', 'Test Tea', 'TEA-001', 'packet', 25, 18, 3, 7)`);
+      expect(seeded.rows[0]).toEqual({ products: 8, customers: 4, sales: 4, movements: 18, entries: 9, low_stock: 2, outstanding: "770.00" });
+      const newProduct = await db.query<{ create_product: string }>(`select public.create_product('${shopId}', 'Test Tea', 'TST-001', 'packet', 25, 18, 3, 7)`);
       const opening = await db.query<{ current_stock: number; movements: number }>(`
         select p.current_stock,
           (select count(*)::integer from public.inventory_movements where product_id = p.id) movements
@@ -80,10 +86,21 @@ describe("Supabase migration in local PostgreSQL", () => {
       const saved = await db.query<{ total_amount: string }>(`select total_amount from public.sales where id = '${successful.rows[0].record_sale}'`);
       expect(Number(saved.rows[0].total_amount)).toBe(30);
 
+      const reset = await db.query<{ reset_demo_shop: string }>("select public.reset_demo_shop()");
+      const resetShopId = reset.rows[0].reset_demo_shop;
+      expect(resetShopId).not.toBe(shopId);
+      const fresh = await db.query<{ products: number; sales: number; stock: number }>(`
+        select (select count(*)::integer from public.products where shop_id = '${resetShopId}') products,
+          (select count(*)::integer from public.sales where shop_id = '${resetShopId}') sales,
+          (select current_stock from public.products where shop_id = '${resetShopId}' and name = 'Maggi') stock
+      `);
+      expect(fresh.rows[0]).toEqual({ products: 8, sales: 4, stock: 46 });
+
       await db.exec(`set request.jwt.claim.sub = '${otherId}';`);
-      const hidden = await db.query<{ count: number }>(`select count(*)::integer as count from public.products where shop_id = '${shopId}'`);
+      const hidden = await db.query<{ count: number }>(`select count(*)::integer as count from public.products where shop_id = '${resetShopId}'`);
       expect(hidden.rows[0].count).toBe(0);
-      await expect(db.query(`select public.adjust_stock('${shopId}', '${maggi.id}', 1, 'Cross shop')`)).rejects.toThrow();
+      await expect(db.query(`select public.reset_demo_shop()`)).rejects.toThrow();
+      await expect(db.query(`select public.adjust_stock('${resetShopId}', (select id from public.products where shop_id = '${resetShopId}' limit 1), 1, 'Cross shop')`)).rejects.toThrow();
     } finally {
       await db.close();
     }

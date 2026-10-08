@@ -21,6 +21,15 @@ describe("MockAIProvider", () => {
     });
   });
 
+  it("handles supported Hindi transcripts after Prisma transcription", async () => {
+    await expect(provider.reason({ text: "मैगी के २० पैकेट जोड़ कर दो।" })).resolves.toEqual({
+      kind: "tool_call", tool: { intent: "inventory.adjust", arguments: { product: "Maggi", delta: 20 } },
+    });
+    await expect(provider.reason({ text: "शर्मा जी का कितना उधार है?" })).resolves.toMatchObject({
+      kind: "tool_call", tool: { intent: "khata.getBalance" },
+    });
+  });
+
   it("returns a date-scoped sales intent from the mock phrase", async () => {
     const fixed = new MockAIProvider(() => "2026-10-07");
     await expect(fixed.reason({ text: "Aaj ki total sale batao" })).resolves.toEqual({
@@ -40,7 +49,7 @@ describe("MockAIProvider", () => {
     await expect(offlineProvider.synthesize("Namaste")).resolves.toEqual({ kind: "text_fallback", text: "Namaste" });
   });
 
-  it("rejects a live provider until it is explicitly implemented", () => {
+  it("requires a server-side key for the Gnani voice provider", () => {
     expect(() => createAIProvider({ AI_PROVIDER: "gnani" })).toThrow();
   });
 

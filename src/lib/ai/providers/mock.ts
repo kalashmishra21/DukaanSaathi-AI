@@ -14,7 +14,11 @@ export class MockAIProvider implements AIProvider {
   }
 
   async reason(input: ReasoningInput): Promise<ReasoningResult> {
-    const text = input.text.trim();
+    const text = input.text.trim()
+      .replace(/^मैगी के ([0-9०-९]+) पैकेट (?:ऐड|एड|जोड़) कर दो[.!?।]?$/u, (_, amount: string) =>
+        `Maggi ke ${amount.replace(/[०-९]/gu, (digit) => String("०१२३४५६७८९".indexOf(digit)))} packet add kar do`)
+      .replace(/^शर्मा जी का कितना उधार है[.!?।]?$/u, "Sharma ji ka kitna udhaar hai?")
+      .replace(/^आज की (?:कुल|टोटल) सेल बताओ[.!?।]?$/u, "Aaj ki total sale batao");
     const inventory = /^maggi ke (\d+) packet add kar do[.!?]?$/i.exec(text);
 
     if (inventory) {

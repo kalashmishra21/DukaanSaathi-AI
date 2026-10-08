@@ -1,18 +1,20 @@
-# Architecture — Phase 3
+# Architecture — Phase 4
 
 DukaanSaathi is one Next.js App Router application backed by Supabase Auth and Postgres when configured. It is sized for a small challenge demo. The landing page and deterministic mock AI preview work without credentials; the connected workspace requires a signed-in shop owner.
 
 ## Trusted flow
 
 ```text
-User text → MockAIProvider → structured intent → Zod validation
+User text or short voice clip → optional Prisma transcription
+          → deterministic mock intent → Zod validation
           → authenticated server tool → owner-scoped Supabase operation
           → authoritative database result → assistant confirmation
+          → optional Timbre speech
 ```
 
-The mock provider makes no Gnani calls. Future Prisma transcription, Evon reasoning and Timbre speech remain behind the `AIProvider` boundary. The demo microphone only plays a sample phrase; it does not record audio. Only a successful trusted operation may produce a completion claim. Unsupported phrases remain previews.
+The mock provider makes no Gnani calls. `AI_PROVIDER=gnani` uses official Prisma REST for short WAV transcription and Timbre REST for speech while continuing to use deterministic mock reasoning. Evon has no configured hosted endpoint. The browser never receives a Gnani key. Only a successful trusted operation may produce a completion claim. Unsupported phrases remain previews.
 
-`/api/mock/reason` validates user text and the mock provider result before calling `BusinessToolExecutor`. That executor has no model or browser database access. Its Supabase repository queries the authenticated owner's shop. The five tool contracts are `inventory.adjust`, `inventory.getStock`, `khata.getBalance`, `khata.addEntry`, and `sales.getDailySummary`. Browser forms post validated actions to `/api/business`; neither route accepts a caller-supplied shop ID.
+`/api/assistant/turn` validates user text and the provider result before calling `BusinessToolExecutor`. That executor has no model or browser database access. Its Supabase repository queries the authenticated owner's shop. The five tool contracts are `inventory.adjust`, `inventory.getStock`, `khata.getBalance`, `khata.addEntry`, and `sales.getDailySummary`. Browser forms post validated actions to `/api/business`; neither route accepts a caller-supplied shop ID. `/api/voice/transcribe` accepts only a short mono WAV from an authenticated owner with a connected shop; it calls Prisma only in Gnani mode. TTS is requested after the trusted tool result is known.
 
 ## Data and transactions
 
@@ -24,9 +26,9 @@ Khata outstanding is derived from entries, never independently edited: `gave` ad
 
 ## Demo data and offline tests
 
-`bootstrap_demo_shop()` creates one synthetic private shop after sign-in. It inserts five fictional products, three fictional customers, sample entries, and a sale through the same trusted stock/sale functions. Calling it again for the same owner returns the existing shop. No real phone numbers or personal data are included.
+`bootstrap_demo_shop()` creates one synthetic private shop after sign-in. It inserts eight products, four fictional customers, ledger history, and four sales through the same trusted stock/sale functions. Calling it again for the same owner returns the existing shop. `reset_demo_shop()` is an explicit, owner-scoped transaction that deletes only that owner's named demo shop and recreates its sample records; a failed reseed rolls back the deletion. It does not silently alter existing shops when the migration is applied. No real phone numbers or personal data are included.
 
-The default test suite has no network dependency. It tests Zod boundaries, tool confirmation behavior, money calculations, and runs the SQL migration in embedded PostgreSQL to verify seeding, ownership, direct-write restrictions, stock changes, and failed-sale rollback. A hosted Supabase project is still needed to verify actual Auth, cookie refresh, Data API, and browser CRUD flows.
+The default test suite has no network dependency. It tests Zod boundaries, tool confirmation behavior, money calculations, official Gnani request shapes with a fake transport, and runs the SQL migrations in embedded PostgreSQL to verify seeding, reset, ownership, direct-write restrictions, stock changes, and failed-sale rollback. Hosted Supabase and a private Gnani key are needed for live reset and voice QA.
 
 ## Layout
 
@@ -38,4 +40,4 @@ The default test suite has no network dependency. It tests Zod boundaries, tool 
 - `src/app/app` and `src/components/business`: responsive merchant workspace.
 - `supabase/migrations`: versioned schema and database functions.
 
-Mock-first development protects Gnani programme credits while isolating UI and business rules from model and API failures. Real Gnani integration requires explicit authorization and must keep keys server-side.
+Mock-first development protects Gnani programme credits while isolating UI and business rules from model and API failures. Live Gnani voice use is explicitly opt-in and keeps its key server-side.
