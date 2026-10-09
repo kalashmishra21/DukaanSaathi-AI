@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUp, AudioLines, Camera, FileText, Mic, Paperclip, RotateCcw, ShieldCheck, Square, X } from "lucide-react";
+import { ArrowUp, AudioLines, Camera, FileText, ImagePlus, Info, Mic, Paperclip, RotateCcw, ShieldCheck, Square, X } from "lucide-react";
 import { z } from "zod";
 import { assistantResponseSchema, type AssistantResponse } from "@/lib/business/assistant-response";
 import { pendingClarificationSchema, type recentTurnSchema } from "@/lib/ai/types/tool-call";
@@ -38,12 +38,16 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   const recordingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const player = useRef<HTMLAudioElement | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
+  const pdfInput = useRef<HTMLInputElement | null>(null);
   const cameraInput = useRef<HTMLInputElement | null>(null);
+  const attachmentTrigger = useRef<HTMLButtonElement | null>(null);
+  const attachmentMenu = useRef<HTMLDivElement | null>(null);
   const objectUrls = useRef<string[]>([]);
   const latestMessage = useRef<HTMLElement | null>(null);
   const nextId = useRef(1);
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<{ file: File; preview: AttachmentPreview } | null>(null);
+  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [pending, setPending] = useState<z.infer<typeof pendingClarificationSchema> | null>(null);
   const [inactiveDrafts, setInactiveDrafts] = useState<number[]>([]);
@@ -60,6 +64,17 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   useEffect(() => {
     if (messages.length > 0) latestMessage.current?.scrollIntoView({ block: "start", behavior: "instant" });
   }, [messages.length]);
+
+  useEffect(() => {
+    if (!attachmentMenuOpen) return;
+    const close = (event: MouseEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent && event.key === "Escape") { setAttachmentMenuOpen(false); attachmentTrigger.current?.focus(); }
+      if (event instanceof MouseEvent && !attachmentMenu.current?.contains(event.target as Node)) setAttachmentMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", close); };
+  }, [attachmentMenuOpen]);
 
   useEffect(() => () => {
     if (recordingTimer.current) clearTimeout(recordingTimer.current);
@@ -280,13 +295,22 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
           {attachment && <div className="composer-attachment">{attachment.preview.kind === "image" ? <Image unoptimized src={attachment.preview.url} alt={`Preview of ${attachment.preview.name}`} width={48} height={48} /> : <FileText size={24} aria-hidden="true" />}<span><strong>{attachment.preview.name}</strong><small>Draft check only · no stock change</small></span><button type="button" onClick={() => { URL.revokeObjectURL(attachment.preview.url); setAttachment(null); }} aria-label="Remove attachment"><X size={17} aria-hidden="true" /></button></div>}
           {retryable && lastPrompt && <button className="assistant-retry" type="button" onClick={() => void runPrompt(lastPrompt)} disabled={busy}><RotateCcw size={15} aria-hidden="true" /> Retry safe request</button>}
           <form className="assistant-composer" onSubmit={submit}><label htmlFor="assistant-input" className="sr-only">Ask Saathi</label><input id="assistant-input" value={input} onChange={(event) => setInput(event.target.value)} placeholder={pending ? "e.g. 100 rupaye" : "Ask about stock, khata or a shopping list…"} maxLength={500} disabled={busy || voiceState === "listening"} />
-            <button type="button" className="assistant-attach" onClick={() => fileInput.current?.click()} disabled={busy || voiceState === "listening"} aria-label="Attach image or PDF"><Paperclip size={20} aria-hidden="true" /></button>
-            <button type="button" className="assistant-camera" onClick={() => cameraInput.current?.click()} disabled={busy || voiceState === "listening"} aria-label="Take shopping list photo"><Camera size={20} aria-hidden="true" /></button>
+            <div className="assistant-attachment-control" ref={attachmentMenu}>
+              <button ref={attachmentTrigger} type="button" className="assistant-attach" onClick={() => setAttachmentMenuOpen((value) => !value)} disabled={busy || voiceState === "listening"} aria-label="Add attachment" aria-expanded={attachmentMenuOpen} aria-controls="assistant-attachment-menu"><Paperclip size={20} aria-hidden="true" /></button>
+              {attachmentMenuOpen && <div id="assistant-attachment-menu" className="assistant-attachment-menu">
+                <strong>Add a shopping list</strong>
+                <button type="button" onClick={() => { setAttachmentMenuOpen(false); fileInput.current?.click(); }}><ImagePlus size={18} aria-hidden="true" /> Upload photo</button>
+                <button type="button" onClick={() => { setAttachmentMenuOpen(false); pdfInput.current?.click(); }}><FileText size={18} aria-hidden="true" /> Upload PDF/document</button>
+                <button type="button" onClick={() => { setAttachmentMenuOpen(false); cameraInput.current?.click(); }}><Camera size={18} aria-hidden="true" /> Take photo</button>
+                <details className="attachment-privacy"><summary><Info size={16} aria-hidden="true" /> Attachments &amp; privacy</summary><p>JPG, PNG, WebP or PDF, up to 5 MB. Files are not saved by DukaanSaathi. Images go to the vision provider. Lists remain drafts until you confirm a sale.</p></details>
+              </div>}
+            </div>
+            <label className="assistant-language-control"><span className="sr-only">Voice language</span><select aria-label="Voice language" value={voiceLanguage} onChange={(event) => setVoiceLanguage(event.target.value as typeof voiceLanguage)} disabled={busy || voiceState === "listening"}><option value="hi-IN">हिंदी</option><option value="en-IN">EN</option></select></label>
             <button className="assistant-mic" type="button" disabled={busy || (realVoice && !voiceAvailable)} aria-label={realVoice ? voiceState === "listening" ? "Stop recording" : "Start recording" : "Play sample voice flow"} onClick={() => void toggleVoice()}>{realVoice && voiceState === "listening" ? <Square size={17} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}<span>{realVoice ? voiceState === "listening" ? "Stop" : "Speak" : "Sample"}</span></button>
             <button className="assistant-send" type="submit" disabled={busy || voiceState === "listening" || (!input.trim() && !attachment)} aria-label="Send message"><ArrowUp size={19} aria-hidden="true" /></button></form>
-          <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="sr-only" tabIndex={-1} onChange={(event) => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
+          <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" tabIndex={-1} onChange={(event) => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
+          <input ref={pdfInput} type="file" accept="application/pdf,.pdf" className="sr-only" tabIndex={-1} onChange={(event) => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
           <input ref={cameraInput} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" tabIndex={-1} onChange={(event) => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
-          <div className="composer-meta"><details><summary>Attachments &amp; privacy</summary><p>JPG, PNG, WebP or PDF, up to 5 MB. Files are not saved by DukaanSaathi. Images go to the vision provider. Lists remain drafts until you confirm a sale.</p></details>{realVoice && <label>Voice language <select value={voiceLanguage} onChange={(event) => setVoiceLanguage(event.target.value as typeof voiceLanguage)} disabled={busy || voiceState === "listening"}><option value="hi-IN">Hindi</option><option value="en-IN">English</option></select></label>}</div>
           {voiceNotice && <p className="composer-voice-notice" role="status">{voiceNotice}</p>}
           {speechUrl && <audio controls src={speechUrl} aria-label="Spoken assistant reply" className="assistant-audio" />}
         </div>

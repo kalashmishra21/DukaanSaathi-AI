@@ -29,9 +29,9 @@ function authMessage(reason: unknown): string {
   return "We couldn't complete that request. Please try again.";
 }
 
-export function SignInForm() {
+export function SignInForm({ initialMode = "signin" }: { initialMode?: Mode }) {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("signin");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -45,6 +45,7 @@ export function SignInForm() {
     setError("");
     setErrors({});
     setVisible({ password: false, confirmPassword: false });
+    router.replace(next === "signup" ? "/signin?mode=signup" : "/signin", { scroll: false });
   }
 
   function clearField(field: Field) {

@@ -4,21 +4,33 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChartNoAxesCombined, House, MessageCircleMore, Package, ReceiptText, ScrollText, Truck } from "lucide-react";
 
-const items = [
-  { href: "/app", label: "Overview", icon: House },
-  { href: "/app/assistant", label: "Assistant", icon: MessageCircleMore },
-  { href: "/app/inventory", label: "Inventory", icon: Package },
-  { href: "/app/khata", label: "Khata", icon: ScrollText },
-  { href: "/app/sales", label: "Sales", icon: ChartNoAxesCombined },
-  { href: "/app/suppliers", label: "Suppliers", icon: Truck },
-  { href: "/app/orders", label: "Orders", icon: ReceiptText },
+const groups = [
+  { label: "Work", items: [
+    { href: "/app/assistant", label: "Assistant", icon: MessageCircleMore },
+    { href: "/app", label: "Overview", icon: House },
+  ] },
+  { label: "Your store", items: [
+    { href: "/app/inventory", label: "Inventory", icon: Package },
+    { href: "/app/khata", label: "Khata", icon: ScrollText },
+    { href: "/app/sales", label: "Sales", icon: ChartNoAxesCombined },
+  ] },
+  { label: "Supply", items: [
+    { href: "/app/suppliers", label: "Suppliers", icon: Truck },
+    { href: "/app/orders", label: "Orders", icon: ReceiptText },
+  ] },
 ];
 
-export function WorkspaceNav() {
+export function WorkspaceNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
     <nav className="workspace-nav" aria-label="Workspace navigation">
-      {items.map(({ href, label, icon: Icon }) => <Link key={href} href={href} prefetch={true} aria-current={pathname === href ? "page" : undefined}><Icon size={18} strokeWidth={1.7} aria-hidden="true" /><span>{label}</span></Link>)}
+      {groups.map((group) => <div className="workspace-nav-group" key={group.label}>
+        <span className="workspace-nav-label">{group.label}</span>
+        {group.items.map(({ href, label, icon: Icon }) => <Link key={href} href={href} prefetch={true} onClick={onNavigate}
+          title={label} aria-label={label} aria-current={pathname === href ? "page" : undefined}>
+          <Icon size={19} strokeWidth={1.65} aria-hidden="true" /><span>{label}</span>
+        </Link>)}
+      </div>)}
     </nav>
   );
 }

@@ -1,18 +1,16 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+import { BrandLockup } from "./brand";
 
 export function SiteHeader() {
   return (
     <header className="site-header landing-header">
-      <Link className="brand" href="/" aria-label="DukaanSaathi AI, home">
-        <span className="brand-mark" aria-hidden="true"><span /></span>
-        <span>DukaanSaathi <span className="brand-ai">AI</span></span>
-      </Link>
+      <BrandLockup />
       <nav className="landing-nav" aria-label="Landing navigation">
         <a href="#possibilities">Capabilities</a>
         <a href="#voice-demo">Voice demo</a>
       </nav>
-      <Link className="header-link" href="/app/assistant">Open workspace <ArrowUpRight size={17} strokeWidth={1.8} aria-hidden="true" /></Link>
+      <div className="landing-account-actions"><Link href="/signin">Login</Link><Link className="header-link" href="/signin?mode=signup">Sign Up <ArrowUpRight size={17} strokeWidth={1.8} aria-hidden="true" /></Link></div>
     </header>
   );
 }

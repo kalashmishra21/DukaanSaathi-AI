@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Color, type Group, type MeshStandardMaterial } from "three";
 import type { CoreMode } from "./saathi-core";
 
@@ -9,12 +9,19 @@ const copper = new Color("#d2a66e");
 const emerald = new Color("#8fc4a2");
 const ivory = new Color("#eee8d8");
 
-function CoreObject({ mode }: { mode: CoreMode }) {
+function CoreObject({ mode, onReady }: { mode: CoreMode; onReady: () => void }) {
   const body = useRef<Group>(null);
   const shell = useRef<MeshStandardMaterial>(null);
   const elapsed = useRef(0);
+  const paintedFrames = useRef(0);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (revealTimer.current) clearTimeout(revealTimer.current); }, []);
 
   useFrame(({ pointer }, delta) => {
+    if (paintedFrames.current < 2 && ++paintedFrames.current === 2) {
+      revealTimer.current = setTimeout(onReady, 1200);
+    }
     if (!body.current || !shell.current) return;
     elapsed.current += Math.min(delta, 0.05);
     const speed = mode === "thinking" ? 0.28 : mode === "listening" ? 0.11 : mode === "action" ? 0.08 : 0;
@@ -29,11 +36,11 @@ function CoreObject({ mode }: { mode: CoreMode }) {
     <group ref={body}>
       <mesh>
         <icosahedronGeometry args={[1.18, 0]} />
-        <meshStandardMaterial ref={shell} color="#d2a66e" metalness={0.58} roughness={0.34} flatShading />
+        <meshStandardMaterial ref={shell} color="#d2a66e" metalness={0.24} roughness={0.62} flatShading />
       </mesh>
       <mesh scale={1.025}>
         <icosahedronGeometry args={[1.18, 0]} />
-        <meshBasicMaterial color="#fff4dc" wireframe transparent opacity={0.2} />
+        <meshBasicMaterial color="#fff4dc" wireframe transparent opacity={0.34} />
       </mesh>
       <mesh rotation={[0.55, 0.12, 0.1]}>
         <torusGeometry args={[1.62, 0.012, 5, 90]} />
@@ -65,13 +72,12 @@ export default function CoreScene({ mode, onReady }: { mode: CoreMode; onReady: 
       camera={{ position: [0, 0, 5.2], fov: 48 }}
       dpr={[1, 1.5]}
       gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
-      onCreated={() => requestAnimationFrame(onReady)}
       fallback={<span className="core-canvas-fallback" aria-hidden="true" />}
     >
-      <ambientLight intensity={1.8} />
-      <directionalLight position={[2.5, 3.5, 5]} intensity={2.7} color="#fff4d8" />
-      <directionalLight position={[-3, -1, -2]} intensity={1.5} color="#a56d36" />
-      <CoreObject mode={mode} />
+      <ambientLight intensity={0.9} />
+      <directionalLight position={[2.5, 3.5, 5]} intensity={2.1} color="#fff4d8" />
+      <directionalLight position={[-3, -1, -2]} intensity={1.1} color="#a56d36" />
+      <CoreObject mode={mode} onReady={onReady} />
     </Canvas>
   );
 }

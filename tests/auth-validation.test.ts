@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { signInSchema, signUpSchema } from "../src/lib/auth/validation";
+import { profileUpdateSchema } from "../src/lib/auth/profile-schema";
 
 describe("auth form validation", () => {
   it("normalizes email and full name before account creation", () => {
@@ -17,5 +18,18 @@ describe("auth form validation", () => {
   it("requires only email and password for sign in", () => {
     expect(signInSchema.safeParse({ email: "owner@example.com", password: "demo-password" }).success).toBe(true);
     expect(signInSchema.safeParse({ email: "owner@example.com", password: "" }).success).toBe(false);
+  });
+});
+
+describe("profile edit boundary", () => {
+  it("accepts trimmed account and shop names within their limits", () => {
+    expect(profileUpdateSchema.parse({ field: "displayName", value: "  Demo Owner  " }).value).toBe("Demo Owner");
+    expect(profileUpdateSchema.parse({ field: "shopName", value: "  Corner Store  " }).value).toBe("Corner Store");
+  });
+
+  it("rejects blank, control-character and oversized edits", () => {
+    expect(profileUpdateSchema.safeParse({ field: "displayName", value: " " }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ field: "shopName", value: "Shop\nInjection" }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ field: "displayName", value: "a".repeat(81) }).success).toBe(false);
   });
 });

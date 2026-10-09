@@ -17,7 +17,13 @@ export async function proxy(request: NextRequest) {
     },
   });
   try {
-    await supabase.auth.getClaims();
+    const { data } = await supabase.auth.getClaims();
+    if (data?.claims?.sub && (request.nextUrl.pathname === "/" || request.nextUrl.pathname === "/signin")) {
+      const redirect = NextResponse.redirect(new URL("/app", request.url));
+      response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+      redirect.headers.set("Cache-Control", "private, no-store");
+      return redirect;
+    }
   } catch {
     // The destination route shows an unavailable state instead of hiding it.
   }
@@ -26,5 +32,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/api/business", "/api/assistant/:path*", "/api/voice/transcribe"],
+  matcher: ["/", "/signin", "/app/:path*", "/api/business", "/api/assistant/:path*", "/api/voice/transcribe"],
 };

@@ -17,6 +17,8 @@
 
 Light and dark are equal operating modes. Light uses warm ivory reading surfaces and charcoal type; dark uses layered charcoal and warm ivory type, never pure black. Copper identifies attention and decisions; emerald identifies verified positive states. Use semantic workspace tokens for surfaces, text, borders, fields, and status so every route changes coherently. Translucency belongs only on elevated chrome or a focused overlay. Theme selection persists, follows the system until chosen, and applies before the first paint.
 
+The named modes are **Ivory Market** (cosmic latte and cream, dark forest ink, muted copper) and **Night Bazaar** (deep forest, sage, copper, warm ivory). The public landing responds to the same appearance setting. The DukaanSaathi symbol is a crisp six-sided D with voice lines, paired with a compact wordmark; use the same geometry in the favicon and navigation. Keep the desktop navigation collapsible and use a full-height drawer with labelled destinations on phones.
+
 Operational pages use compact editorial titles and place the first useful control within the initial mobile viewport. Preserve tabular numerals for stock, money, and counts. Mobile directories become readable cards or panes rather than squeezed desktop tables.
 
 ## Spacing and shape
