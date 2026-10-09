@@ -15,6 +15,34 @@ describe("MockAIProvider", () => {
     });
   });
 
+  it("asks for missing stock details without proposing a mutation", async () => {
+    await expect(provider.reason({ text: "Kuchh maal adjust kar do" })).resolves.toEqual({
+      kind: "clarify", intent: "inventory.adjust",
+      question: "Which product and how many units should I add or remove? Nothing was changed.",
+    });
+  });
+
+  it("recognizes common English and Hindi stock and sales phrases offline", async () => {
+    const fixed = new MockAIProvider(() => "2026-10-09");
+    await expect(fixed.reason({ text: "Add 2 packets of Maggi to inventory" })).resolves.toMatchObject({
+      kind: "tool_call", tool: { intent: "inventory.adjust", arguments: { product: "Maggi", delta: 2 } },
+    });
+    await expect(fixed.reason({ text: "What is the stock of Maggi?" })).resolves.toMatchObject({
+      kind: "tool_call", tool: { intent: "inventory.getStock", arguments: { product: "Maggi" } },
+    });
+    await expect(fixed.reason({ text: "मैगी का स्टॉक बताओ" })).resolves.toMatchObject({
+      kind: "tool_call", tool: { intent: "inventory.getStock", arguments: { product: "Maggi" } },
+    });
+    await expect(fixed.reason({ text: "How much does Sharma ji owe?" })).resolves.toMatchObject({
+      kind: "tool_call", tool: { intent: "khata.getBalance", arguments: { customer: "Sharma ji" } },
+    });
+    for (const text of ["What are today's sales?", "आज की बिक्री बताओ"]) {
+      await expect(fixed.reason({ text })).resolves.toMatchObject({
+        kind: "tool_call", tool: { intent: "sales.getDailySummary", arguments: { date: "2026-10-09" } },
+      });
+    }
+  });
+
   it("returns deterministic khata intent", async () => {
     await expect(provider.reason({ text: "Sharma ji ka kitna udhaar hai?" })).resolves.toEqual({
       kind: "tool_call",

@@ -16,7 +16,7 @@ describe("OpenRouter reasoner trust boundary", () => {
       return completion("inventory_adjust", { product: "Maggi", delta: 20 });
     };
     const reasoner = new OpenRouterReasoner("test-key", model, request, () => "2026-10-08");
-    await expect(reasoner.reason({ text: "Add 20 packets of Maggi to inventory" })).resolves.toEqual({
+    await expect(reasoner.reason({ text: "Increase Maggi inventory by twenty packets" })).resolves.toEqual({
       kind: "tool_call", tool: { intent: "inventory.adjust", arguments: { product: "Maggi", delta: 20 } },
     });
     expect(requestBody?.model).toBe(model);

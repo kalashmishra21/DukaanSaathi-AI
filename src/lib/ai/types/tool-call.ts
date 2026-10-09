@@ -44,7 +44,10 @@ export const toolCallSchema = z.discriminatedUnion("intent", [
 
 export const reasoningResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("tool_call"), tool: toolCallSchema }).strict(),
-  z.object({ kind: z.literal("clarify"), question: name, pending: z.object({ kind: z.literal("open-account-amount"), customer: name }).strict() }).strict(),
+  z.object({ kind: z.literal("clarify"), question: name,
+    pending: z.object({ kind: z.literal("open-account-amount"), customer: name }).strict().optional(),
+    intent: z.literal("inventory.adjust").optional(),
+  }).strict(),
   z.object({ kind: z.literal("unsupported"), message: name }).strict(),
 ]);
 

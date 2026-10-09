@@ -25,6 +25,29 @@ export class MockAIProvider implements AIProvider {
       .replace(/^आज की (?:कुल|टोटल) सेल बताओ[.!?।]?$/u, "Aaj ki total sale batao")
       .replace(/[०-९]/gu, (digit) => String("०१२३४५६७८९".indexOf(digit)));
 
+    const englishAdd = /^add (\d+) (?:packets?|units?) of (.+?) to (?:inventory|stock)[.!?]?$/i.exec(text);
+    if (englishAdd) return reasoningResultSchema.parse({ kind: "tool_call", tool: {
+      intent: "inventory.adjust", arguments: { product: englishAdd[2], delta: Number(englishAdd[1]) },
+    } });
+
+    const englishStock = /^(?:what(?:'s| is) the stock of|show (?:me )?the stock of) (.+?)[.!?]?$/i.exec(text);
+    const hindiStock = /^(.+?) का स्टॉक बताओ[.!?।]?$/u.exec(text);
+    if (englishStock || hindiStock) return reasoningResultSchema.parse({ kind: "tool_call", tool: {
+      intent: "inventory.getStock", arguments: { product: hindiStock?.[1] === "मैगी" ? "Maggi" : (englishStock ?? hindiStock)![1] },
+    } });
+
+    const englishBalance = /^how much does (.+?) owe(?: (?:us|the shop))?[.!?]?$/i.exec(text);
+    if (englishBalance) return reasoningResultSchema.parse({ kind: "tool_call", tool: {
+      intent: "khata.getBalance", arguments: { customer: englishBalance[1] },
+    } });
+
+    if (/^(?:what(?:'s| is| are) today's sales|tell me today's (?:total )?sales|today's sales summary)[.!?]?$/i.test(text)
+      || /^आज की (?:बिक्री|सेल) बताओ[.!?।]?$/u.test(text)) {
+      return reasoningResultSchema.parse({ kind: "tool_call", tool: {
+        intent: "sales.getDailySummary", arguments: { date: this.today() },
+      } });
+    }
+
     const openAccount = /^(.+?) ke naam se (\d+) rupaye ka naya udhaar khata bana do[.!?]?$/i.exec(text);
     if (/^(?:low[- ]stock items? ki reorder list bana do|reorder suggestions? batao)[.!?]?$/i.test(text))
       return reasoningResultSchema.parse({ kind: "tool_call", tool: { intent: "inventory.getReorderSuggestions", arguments: {} } });
@@ -101,6 +124,12 @@ export class MockAIProvider implements AIProvider {
     if (/^aaj ki (?:total )?sale batao[.!?]?$/i.test(text)) return reasoningResultSchema.parse({
       kind: "tool_call", tool: { intent: "sales.getDailySummary", arguments: { date: this.today() } },
     });
+
+    // Ask for required details before a model can guess a product or quantity.
+    if (!/\d/.test(text) && /(?:stock|maal|inventory)/i.test(text) && /(?:adjust|badhao|ghatao|add|kam)/i.test(text)) {
+      return reasoningResultSchema.parse({ kind: "clarify", intent: "inventory.adjust",
+        question: "Which product and how many units should I add or remove? Nothing was changed." });
+    }
 
     return reasoningResultSchema.parse({
       kind: "unsupported",

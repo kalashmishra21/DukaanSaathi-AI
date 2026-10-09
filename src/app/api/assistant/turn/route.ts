@@ -39,7 +39,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "The request could not be safely interpreted. Nothing was changed." }, { status: 503 });
   }
   const preview = describeMockTurn(reasoning);
-  if (reasoning.kind === "clarify") return Response.json({ state: "clarify", title: "One detail needed", intent: "khata.openAccount", detail: "No customer or ledger entry has been created.", reply: reasoning.question, pending: reasoning.pending });
+  if (reasoning.kind === "clarify") return Response.json({ state: "clarify", title: "One detail needed",
+    intent: reasoning.intent ?? "khata.openAccount",
+    detail: reasoning.pending ? "No customer or ledger entry has been created." : "No store action has been taken.",
+    reply: reasoning.question, ...(reasoning.pending ? { pending: reasoning.pending } : {}) });
   if (reasoning.kind === "unsupported") return Response.json({ state: "unsupported", ...preview });
   if (context.kind === "setup" || context.kind === "no-shop") return Response.json({ state: "preview", ...preview });
 

@@ -23,8 +23,8 @@ type RecentTurn = z.infer<typeof recentTurnSchema>;
 const examples = [
   "Maggi ke 20 packet add kar do",
   "Sharma ji ka kitna udhaar hai?",
-  "Low-stock items ki reorder list bana do",
-  "Open orders dikhao",
+  "Shopping list: Maggi 2, Parle-G 3",
+  "Aaj ki sale batao",
 ];
 const transcriptSchema = z.object({ text: z.string().trim().min(1), language: z.string().optional() });
 const errorSchema = z.object({ error: z.string().min(1).max(250) });
@@ -270,7 +270,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
             {message.result && !message.result.shoppingList && message.result.state !== "unsupported" && <div className={`conversation-result ${message.result.state}`}><span>{message.result.state === "confirmed" ? "VERIFIED STORE RESULT" : message.result.state === "draft" ? "DRAFT FOR REVIEW" : message.result.state === "clarify" ? "WAITING FOR YOU" : "STORE RESULT"}</span><strong>{message.result.title}</strong><small>{message.result.detail}</small></div>}
             {message.attachment && <div className="conversation-attachment">{message.attachment.kind === "image" ? <Image unoptimized src={message.attachment.url} alt={`Preview of ${message.attachment.name}`} width={64} height={64} /> : <FileText size={26} aria-hidden="true" />}<span>{message.attachment.name}</span></div>}
             {message.result?.shoppingList && <ShoppingListResult draft={message.result.shoppingList} busy={busy} inactive={inactiveDrafts.includes(message.id)} onConfirm={(draft, payment) => void confirmSale(draft, payment, message.id)} />}
-            {message.result?.state === "clarify" && <span className="clarification-hint">Waiting for an opening amount · nothing saved yet</span>}
+            {message.result?.state === "clarify" && <span className="clarification-hint">{message.result.pending ? "Waiting for an opening amount · nothing saved yet" : "Include the product and quantity · nothing saved yet"}</span>}
           </div></article>)}
           {messages.length === 0 && <div className="assistant-starters"><span>OR START WITH A REQUEST</span><div>{examples.map((example) => <button key={example} type="button" onClick={() => void runPrompt(example)} disabled={busy}>{example}<ArrowUp size={14} aria-hidden="true" /></button>)}</div></div>}
           {busy && <div className="conversation-processing" role="status"><span className="processing-dot" /> {voiceState === "transcribing" ? "Transcribing with Prisma" : workingOn === "attachment" ? "Reading your list; nothing has been changed" : "Checking request and store"}</div>}

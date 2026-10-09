@@ -9,7 +9,9 @@ export type MockTurn = {
 
 export function describeMockTurn(result: ReasoningResult): MockTurn {
   if (result.kind === "clarify") return {
-    title: "One detail needed", intent: "khata.openAccount", detail: "No customer or ledger entry has been created.", reply: result.question,
+    title: "One detail needed", intent: result.intent ?? "khata.openAccount",
+    detail: result.pending ? "No customer or ledger entry has been created." : "No store action has been taken.",
+    reply: result.question,
   };
   if (result.kind === "unsupported") {
     return {
