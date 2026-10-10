@@ -7,7 +7,7 @@ export function SiteHeader() {
     <header className="site-header landing-header">
       <BrandLockup />
       <nav className="landing-nav" aria-label="Landing navigation">
-        <a href="#possibilities">Capabilities</a>
+        <a href="#story">How it works</a>
         <a href="#voice-demo">Voice demo</a>
       </nav>
       <div className="landing-account-actions"><Link href="/signin">Login</Link><Link className="header-link" href="/signin?mode=signup">Sign Up <ArrowUpRight size={17} strokeWidth={1.8} aria-hidden="true" /></Link></div>

@@ -6,7 +6,7 @@ import { BrandLockup } from "@/components/layout/brand";
 import { getShopContext } from "@/server/data/context";
 import { readProviderConfig } from "@/lib/env/config";
 
-export const metadata: Metadata = { title: "Workspace | DukaanSaathi AI" };
+export const metadata: Metadata = { title: "Workspace | DukaanSaathi AI", robots: { index: false, follow: false } };
 
 function WorkspaceLoadingShell() {
   return <div className="workspace-shell" aria-busy="true">

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { publicSiteUrl } from "@/lib/seo/site-url";
 import "./globals.css";
 import "./landing.css";
 import "./workspace.css";
@@ -23,9 +24,14 @@ const newsreader = localFont({
   display: "swap",
 });
 
+const siteUrl = publicSiteUrl();
+
 export const metadata: Metadata = {
+  metadataBase: siteUrl ?? new URL("http://localhost:3100"),
+  applicationName: "DukaanSaathi AI",
   title: "DukaanSaathi AI — Your store, understood by voice",
   description: "A multilingual AI copilot for Indian retailers to manage inventory, khata and sales through natural conversation and trusted store tools.",
+  robots: { index: Boolean(siteUrl), follow: Boolean(siteUrl) },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

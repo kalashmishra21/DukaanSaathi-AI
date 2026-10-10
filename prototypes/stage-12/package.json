@@ -1,0 +1,16 @@
+{
+  "name": "dukaansaathi-stage12-preview",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "liquid-gl": "3.0.0",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

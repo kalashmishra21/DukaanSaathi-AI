@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Local visual exploration for the next DukaanSaathi AI experience.">
+  <title>DukaanSaathi AI — Stage 12 studio preview</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <script>try{const saved=localStorage.getItem('ds-stage12-theme');document.documentElement.dataset.theme=saved==='light'||saved==='dark'?saved:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch{}</script>
+  <link rel="preload" href="./assets/manrope-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./assets/newsreader-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./studio.css">
+  <script src="./studio.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="wordmark" href="#top" aria-label="DukaanSaathi AI, top of preview">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 3.5 42.5 14v20L24 44.5 5.5 34V14L24 3.5Z"/><path d="M17 14v20M17 14h7.1c6.9 0 11.9 4.1 11.9 10s-5 10-11.9 10H17"/><path d="M22 19v10M26 16.5v15M30 20v8"/></svg>
+      <span>DukaanSaathi <small>AI</small></span>
+    </a>
+    <nav aria-label="Preview sections"><a href="#story">How it works</a><a href="#studio">The studio</a></nav>
+    <div class="header-right">
+      <span class="preview-tag">Visual prototype</span>
+      <button class="theme-toggle" type="button" aria-label="Switch to Ivory Market theme" aria-pressed="false"><span class="theme-glyph" aria-hidden="true">◐</span><span class="theme-label">Night Bazaar</span></button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero page-frame" id="top" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="hero-identity">Voice, shaped for Indian commerce.</p>
+        <h1 id="hero-title">Your store,<br><em>understood.</em></h1>
+        <p class="hero-description">Inventory, khata and sales come into focus when the work begins with your voice.</p>
+        <div class="hero-actions"><a class="action-primary" href="#story">Explore the experience <span aria-hidden="true">↗</span></a><a class="action-text" href="#studio">See the merchant studio <span aria-hidden="true">↓</span></a></div>
+        <p class="hero-honesty"><span aria-hidden="true"></span> Simulated visual sequence · no microphone or store action</p>
+      </div>
+
+      <div class="core-column">
+        <div class="glass-floating" aria-hidden="true"><div class="glass-refraction"></div><div class="glass-content"><span>SAATHI / INTENT LENS</span><strong>Signal becomes meaning.</strong><small>Illustrative visual</small></div></div>
+        <div class="core-display" data-state="idle" aria-labelledby="core-heading">
+          <div class="core-topline"><span id="core-heading">Saathi Core 2.0</span><span>VOICE / INTENT / VERIFIED PREVIEW</span></div>
+          <div class="core-orbit" id="core-orbit">
+            <div class="orbit orbit-outer"></div><div class="orbit orbit-inner"></div>
+            <span class="orbit-node node-stock">Stock</span><span class="orbit-node node-khata">Khata</span><span class="orbit-node node-sales">Sales</span>
+            <div class="core-halo"></div>
+            <div class="core-object" id="core-object" role="img" aria-label="Faceted Saathi Core, currently at rest">
+              <svg viewBox="0 0 480 480" aria-hidden="true" focusable="false">
+                <defs><linearGradient id="core-face" x1=".1" y1="0" x2=".9" y2="1"><stop offset="0" stop-color="#f7d9ac"/><stop offset=".45" stop-color="#b87749"/><stop offset="1" stop-color="#5e4432"/></linearGradient></defs>
+                <path class="core-shadow" d="M240 52 363 103 424 226 382 349 263 427 130 395 54 286 75 157 169 68Z"/>
+                <path class="facet facet-back" d="M240 52 363 103 424 226 382 349 263 427 130 395 54 286 75 157 169 68Z"/>
+                <path class="facet facet-a" d="M240 52 363 103 296 170 240 210 169 68Z"/>
+                <path class="facet facet-b" d="M363 103 424 226 345 250 296 170Z"/>
+                <path class="facet facet-c" d="M424 226 382 349 286 315 345 250Z"/>
+                <path class="facet facet-d" d="M382 349 263 427 240 352 286 315Z"/>
+                <path class="facet facet-e" d="M263 427 130 395 168 309 240 352Z"/>
+                <path class="facet facet-f" d="M130 395 54 286 136 242 168 309Z"/>
+                <path class="facet facet-g" d="M54 286 75 157 143 182 136 242Z"/>
+                <path class="facet facet-h" d="M75 157 169 68 240 210 143 182Z"/>
+                <path class="facet facet-center" d="M240 210 296 170 345 250 286 315 240 352 168 309 136 242 143 182Z"/>
+                <path class="facet-aperture" d="M240 210 296 170 345 250 286 315Z"/>
+                <circle class="facet-aperture-rim" cx="284" cy="246" r="27"/>
+                <circle class="facet-aperture-eye" cx="284" cy="246" r="11"/>
+                <path class="facet-line" d="M240 52 240 210M363 103 296 170M424 226 345 250M382 349 286 315M263 427 240 352M130 395 168 309M54 286 136 242M75 157 143 182M169 68 143 182M240 210 345 250M240 210 168 309M240 352 240 210"/>
+                <path class="facet-rim" d="M240 52 363 103 424 226 382 349 263 427 130 395 54 286 75 157 169 68Z"/>
+              </svg>
+            </div>
+            <div class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+          <div class="core-readout" aria-live="off">
+            <div class="demo-command"><span>ILLUSTRATIVE MERCHANT COMMAND</span><strong>“Maggi ke 20 packet add karo”</strong></div>
+            <div class="demo-response"><div class="demo-status"><span class="readout-dot" aria-hidden="true"></span><strong id="state-title">Ready for a request</strong></div><p id="state-detail">A visual simulation. No microphone or store action.</p><div class="demo-chips" aria-hidden="true"><span data-chip="product">Product <b>Maggi</b></span><span data-chip="quantity">Quantity <b>20 packets</b></span><span data-chip="action">Preview <b>+20 stock</b></span></div></div>
+          </div>
+        </div>
+        <div class="core-sequence" aria-label="Illustrative sequence: voice, understanding, validated preview, simulated result">
+          <div class="sequence-track" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <span>Voice</span><span>Understand</span><span>Preview</span><span>Illustrate</span>
+          <button type="button" class="sequence-toggle" aria-label="Pause visual sequence" aria-pressed="false">Pause motion</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="story" id="story" aria-labelledby="story-title">
+      <div class="page-frame story-grid">
+        <div class="story-heading"><p class="story-overline">A useful conversation has a shape.</p><h2 id="story-title">A request becomes<br><em>a clear next step.</em></h2><p>Voice becomes structured intent. A trusted tool, not the model, decides what is saved.</p><div class="story-track" aria-hidden="true"><span id="story-progress"></span></div><div class="story-phase-labels" aria-hidden="true"><span>VOICE</span><span>MEANING</span><span>VERIFY</span></div></div>
+        <ol class="story-steps">
+          <li class="story-step" data-story-state="listening"><span class="step-index">01 / VOICE</span><div><h3>Say it your way.</h3><p>“Maggi ke 20 packet add karo.”</p><div class="story-visual story-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></li>
+          <li class="story-step" data-story-state="thinking"><span class="step-index">02 / UNDERSTAND</span><div><h3>Meaning, made precise.</h3><p>One sentence becomes a proposal the merchant can inspect.</p><div class="story-visual story-extract"><span>PRODUCT <b>Maggi</b></span><span>QUANTITY <b>20 packets</b></span><span>INTENT <b>Adjust stock</b></span></div></div></li>
+          <li class="story-step" data-story-state="action"><span class="step-index">03 / VERIFY</span><div><h3>Truth before a check.</h3><p>The trusted store tool validates and saves a real action. This preview changes nothing.</p><div class="story-visual story-verify"><span>Validated preview</span><strong>Maggi <b>+20</b></strong><small>SIMULATED RESULT · NO DATABASE CHANGE</small></div></div></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="studio page-frame" id="studio" aria-labelledby="studio-title">
+      <div class="studio-heading"><h2 id="studio-title">A studio for the<br><em>whole shop.</em></h2><p>One place to ask, check and act. This is a visual concept using illustrative content.</p></div>
+      <div class="bento">
+        <article class="bento-cell bento-command"><div class="bento-top"><span>ASSISTANT / COMMAND CENTER</span><span class="signal"><i></i> Ready to help</span></div><div class="command-content"><p class="command-prompt">“Sharma ji ka kitna udhaar hai?”</p><div class="command-line"><span class="command-symbol" aria-hidden="true">⌁</span><div><strong>Khata balance</strong><small>Trusted ledger query · illustrative result</small></div><b>₹770</b></div></div><div class="command-compose"><span>Ask Saathi about your store...</span><span aria-hidden="true">↗</span></div></article>
+        <article class="bento-cell bento-inventory"><div class="bento-top"><span>INVENTORY / AT A GLANCE</span><span>05 ITEMS</span></div><h3>Know what<br><em>needs attention.</em></h3><div class="stock-rows"><div><span>Maggi</span><span>48 in stock</span><i style="--fill:72%"></i></div><div><span>Amul Milk</span><span>Low · 6 left</span><i style="--fill:21%"></i></div><div><span>Parle-G</span><span>90 in stock</span><i style="--fill:91%"></i></div></div></article>
+        <article class="bento-cell bento-ledger"><div class="bento-top"><span>KHATA / ILLUSTRATIVE ACCOUNT</span><span>SHARMA JI</span></div><h3>Every entry<br>accounted for.</h3><div class="ledger-lines"><div><span>Gave · opening udhaar</span><b>+₹1,000</b></div><div><span>Received · repayment</span><b>−₹230</b></div><div class="ledger-total"><span>Example outstanding</span><strong>₹770</strong></div></div></article>
+        <article class="bento-cell bento-sales"><div class="bento-top"><span>SALES / ILLUSTRATIVE DAY</span><span>3 SALES</span></div><div class="sales-total"><small>Example daily total</small><strong>₹1,460</strong></div><div class="sales-visual" aria-hidden="true"><span style="height:42%"></span><span style="height:64%"></span><span style="height:48%"></span><span style="height:79%"></span><span style="height:56%"></span><span style="height:91%"></span><span style="height:72%"></span></div><p>One glance at the day, grounded in recorded sales when connected.</p></article>
+      </div>
+    </section>
+
+    <section class="closing"><div class="page-frame closing-inner"><span class="closing-mark" aria-hidden="true">D</span><div><h2>Commerce moves.<br><em>Saathi keeps pace.</em></h2><p>Visual concept only. The current application and its business records are unchanged.</p></div><a href="#top" aria-label="Back to top">↑</a></div></section>
+  </main>
+  <footer class="site-footer page-frame"><span>DukaanSaathi AI</span><span>Stage 12 · local visual study</span></footer>
+</body>
+</html>

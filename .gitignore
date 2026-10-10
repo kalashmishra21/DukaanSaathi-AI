@@ -2,6 +2,7 @@
 /node_modules
 /.next
 /.next-prod
+/.next-prod-*/
 /out
 /build
 /coverage
