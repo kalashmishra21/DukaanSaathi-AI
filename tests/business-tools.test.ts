@@ -4,8 +4,9 @@ import { indiaDayBounds, khataBalance, salePreviewTotal, todayInIndia, totalKhat
 import { BusinessToolExecutor, describeToolResult, type BusinessRepository } from "../src/server/tools/business-executor";
 import { executeValidatedToolCall } from "../src/server/tools/contracts";
 import { matchShoppingList } from "../src/lib/assistant/match-shopping-list";
-import { toolCallSchema } from "../src/lib/ai/types/tool-call";
+import { toolCallSchema, type ToolCall } from "../src/lib/ai/types/tool-call";
 import { reorderSuggestions } from "../src/lib/business/reorder";
+import { MockAIProvider } from "../src/lib/ai/providers/mock";
 
 function fakeRepository() {
   const maggiId = "11111111-1111-4111-8111-111111111112";
@@ -13,9 +14,12 @@ function fakeRepository() {
   let entries: { type: "gave" | "received"; amount: number }[] = [
     { type: "gave", amount: 460 }, { type: "received", amount: 200 },
   ];
+  const productRows = [{ id: maggiId, name: "Maggi", unit: "packet", currentStock: stock, sellingPrice: 15 }];
   const customers = [{ id: "rahul-id", name: "Rahul Sharma" }];
+  const orders: { id: string; supplier: string; status: "draft" | "placed" | "received" | "cancelled"; items: string[] }[] = [];
   const repository: BusinessRepository = {
-    async products() { return [{ id: maggiId, name: "Maggi", unit: "packet", currentStock: stock, sellingPrice: 15 }]; },
+    async products() { return productRows; },
+    async createProduct(input) { const row = { id: "11111111-1111-4111-8111-111111111119", name: input.name, unit: input.unit, currentStock: input.openingStock, sellingPrice: input.sellingPrice }; productRows.push(row); return row; },
     async adjustStock(_id, delta) {
       if (stock + delta < 0) throw new Error("Insufficient stock.");
       stock += delta;
@@ -36,8 +40,10 @@ function fakeRepository() {
     async suppliers() { return [{ id: "11111111-1111-4111-8111-111111111116", name: "North Market Distributors" }]; },
     async createSupplier() { return "11111111-1111-4111-8111-111111111117"; },
     async reorderSuggestions() { return [{ product: "Maggi", stock, threshold: 10, quantity: Math.max(1, 20 - stock) }]; },
-    async openOrders() { return []; },
-    async createOrderDraft() { return "11111111-1111-4111-8111-111111111118"; },
+    async openOrders() { return orders.filter((order) => order.status === "draft" || order.status === "placed"); },
+    async orders() { return orders; },
+    async createOrderDraft(_supplierId, items) { const order = { id: "11111111-1111-4111-8111-111111111118", supplier: "North Market Distributors", status: "draft" as const, items: items.map((item) => `Maggi × ${item.quantity}`) }; orders.push(order); return { id: order.id, status: order.status }; },
+    async transitionOrder(orderId, expectedStatus, action) { const order = orders.find((candidate) => candidate.id === orderId); if (!order) throw new Error("Purchase order not found."); if (order.status !== expectedStatus) throw new Error("The purchase order changed."); order.status = action === "place" ? "placed" : action === "receive" ? "received" : "cancelled"; return order.status; },
   };
   return { repository, getStock: () => stock, getCustomers: () => customers, getEntries: () => entries };
 }
@@ -140,6 +146,69 @@ describe("business boundary", () => {
     expect(result).toMatchObject({ ok: true, data: { customer: "Nandini", balance: 100 } });
     expect(fake.getCustomers()).toContainEqual({ id: "11111111-1111-4111-8111-111111111114", name: "Nandini" });
     expect(fake.getEntries()).toContainEqual({ type: "gave", amount: 100 });
+  });
+
+  it("creates a new product only after the missing selling price is supplied", async () => {
+    const provider = new MockAIProvider();
+    const first = await provider.reason({ text: "50 packet of Bread add kro new inventory h ye" });
+    expect(first).toMatchObject({ kind: "clarify", pending: { kind: "product-create-price", openingStock: 50 } });
+    if (first.kind !== "clarify" || !first.pending) throw new Error("Expected a product-price clarification");
+    const completed = await provider.reason({ text: "₹18 per packet", pending: first.pending });
+    expect(completed).toMatchObject({ kind: "tool_call", tool: { intent: "product.create" } });
+    if (completed.kind !== "tool_call") throw new Error("Expected validated product creation intent");
+    const fake = fakeRepository();
+    const result = await executeValidatedToolCall(completed.tool, new BusinessToolExecutor(fake.repository));
+    expect(result).toMatchObject({ ok: true, data: { product: "Bread", stock: 50, sellingPrice: 18 } });
+    expect(fake.repository.createProduct).toBeDefined();
+  });
+
+  it("routes an existing matching customer to an entry and a missing one through explicit permission", async () => {
+    const fake = fakeRepository();
+    fake.getCustomers().push({ id: "mahi-id", name: "Mahi Patel" });
+    const executor = new BusinessToolExecutor(fake.repository);
+    const existingCall: ToolCall = { intent: "khata.addEntry", arguments: { customer: "Mahi", type: "gave", amountRupees: 100 } };
+    const existing = await executor.execute(existingCall);
+    expect(existing).toMatchObject({ ok: true, data: { customer: "Mahi Patel", balance: 360 } });
+
+    const missingCall: ToolCall = { intent: "khata.addEntry", arguments: { customer: "Nandini", type: "gave", amountRupees: 100 } };
+    const needsPermission = await executor.execute(missingCall);
+    expect(needsPermission).toMatchObject({ ok: false, clarification: { pending: { kind: "khata-create-confirm", customer: "Nandini", amountRupees: 100 } } });
+    expect(fake.getCustomers().some((customer) => customer.name === "Nandini")).toBe(false);
+    if (!("clarification" in needsPermission)) throw new Error("Expected account confirmation");
+    const confirmed = await new MockAIProvider().reason({ text: "haan", pending: needsPermission.clarification.pending });
+    expect(confirmed).toMatchObject({ kind: "tool_call", tool: { intent: "khata.openAccount", arguments: { customer: "Nandini", amountRupees: 100 } } });
+    if (confirmed.kind !== "tool_call") throw new Error("Expected opening-account call");
+    expect(await executor.execute(confirmed.tool)).toMatchObject({ ok: true, data: { customer: "Nandini", balance: 100 } });
+    expect(fake.getCustomers().some((customer) => customer.name === "Nandini")).toBe(true);
+  });
+
+  it("does not guess among ambiguous customer names", async () => {
+    const fake = fakeRepository();
+    fake.getCustomers().push({ id: "mahi-a", name: "Mahi Sharma" }, { id: "mahi-b", name: "Mahi Verma" });
+    const result = await new BusinessToolExecutor(fake.repository).execute({
+      intent: "khata.getBalance", arguments: { customer: "Mahi" },
+    });
+    expect(result).toMatchObject({ ok: false, error: "More than one record matches that name. Use the full name." });
+  });
+
+  it("requires confirmation for owner-scoped order transitions and rejects a stale confirmation", async () => {
+    const fake = fakeRepository();
+    const executor = new BusinessToolExecutor(fake.repository);
+    const created = await executor.execute({ intent: "orders.createDraft", arguments: {
+      supplier: "North Market Distributors", items: [{ product: "Maggi", quantity: 2 }],
+    } });
+    expect(created).toMatchObject({ ok: true, data: { status: "draft" } });
+    const requested = await executor.execute({ intent: "orders.transition", arguments: { order: "North Market Distributors", action: "place" } });
+    expect(requested).toMatchObject({ ok: false, clarification: { pending: { kind: "order-transition-confirm", currentStatus: "draft", action: "place" } } });
+    if (!("clarification" in requested)) throw new Error("Expected explicit order confirmation");
+    const stalePending = requested.clarification.pending;
+    const [order] = await fake.repository.orders();
+    order.status = "placed";
+    const staleIntent = await new MockAIProvider().reason({ text: "yes", pending: stalePending });
+    if (staleIntent.kind !== "tool_call") throw new Error("Expected confirmation tool");
+    const stale = await executor.execute(staleIntent.tool);
+    expect(stale).toMatchObject({ ok: false, error: expect.stringContaining("changed from draft to placed") });
+    expect(order.status).toBe("placed");
   });
 
   it("records a repayment as received and reduces outstanding", async () => {

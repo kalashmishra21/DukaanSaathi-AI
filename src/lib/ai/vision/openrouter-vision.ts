@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { shoppingExtractionSchema, type ShoppingItem } from "../../assistant/shopping-list";
+import { ProviderRequestError, retryProviderRequest } from "../provider-http";
 
 export type VisionImage = { mimeType: "image/jpeg" | "image/png" | "image/webp"; bytes: Uint8Array };
 const endpoint = "https://openrouter.ai/api/v1/chat/completions";
 const completionSchema = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1) });
 const providerErrorSchema = z.object({ error: z.object({ code: z.union([z.string(), z.number()]).optional() }).passthrough() });
-const wait = (duration: number) => new Promise<void>((resolve) => setTimeout(resolve, duration));
 
 function parseItems(content: string): ShoppingItem[] {
   const cleaned = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
@@ -24,7 +24,7 @@ export class OpenRouterVisionExtractor {
     private readonly model: string,
     private readonly request: typeof fetch = fetch,
     private readonly fallbackModels: string[] = [],
-    private readonly delay: (duration: number) => Promise<void> = wait,
+    private readonly delay: (duration: number) => Promise<void> = (duration) => new Promise<void>((resolve) => setTimeout(resolve, duration)),
   ) {}
 
   async extract(images: VisionImage[]): Promise<ShoppingItem[]> {
@@ -43,40 +43,51 @@ export class OpenRouterVisionExtractor {
       ] },
     ];
     const deadline = Date.now() + 45_000;
+    let rateLimit: ProviderRequestError | null = null;
+    let transientFailure: ProviderRequestError | null = null;
     for (const model of models) {
       const body = JSON.stringify({ model, messages, temperature: 0, max_tokens: 700, stream: false });
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const remaining = deadline - Date.now();
-        if (remaining <= 0) break;
-        try {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      try {
+        const response = await retryProviderRequest(async () => {
           const response = await this.request(endpoint, {
             method: "POST",
             headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json" },
-            body, signal: AbortSignal.timeout(Math.min(15_000, remaining)), cache: "no-store",
+            body, signal: AbortSignal.timeout(Math.min(15_000, Math.max(1, deadline - Date.now()))), cache: "no-store",
           });
-          if (!response.ok) {
-            if (response.status === 401 || response.status === 403) throw new Error("Vision provider authorization failed.");
-            if (response.status === 404) break; // Retired model: try the next configured provider immediately.
-            if (!retryableStatus(response.status)) throw new Error(`Vision request was rejected (${response.status}).`);
-          } else {
-            const raw: unknown = await response.json();
-            const providerError = providerErrorSchema.safeParse(raw);
-            if (!providerError.success) {
-              const parsed = completionSchema.safeParse(raw);
-              if (!parsed.success) break;
-              try { return parseItems(parsed.data.choices[0].message.content); } catch { break; }
-            }
-            const code = Number(providerError.data.error.code);
-            if (code === 401 || code === 403) throw new Error("Vision provider authorization failed.");
-            if (code === 404 || (Number.isFinite(code) && !retryableStatus(code))) break;
-          }
-        } catch (error) {
-          if (error instanceof Error && /^(Vision provider authorization|Vision request was rejected)/.test(error.message)) throw error;
-          // A timeout or transient network failure can be retried on another free provider.
+          if (!response.ok) return response;
+          try {
+            const embeddedError = providerErrorSchema.safeParse(await response.clone().json());
+            const status = embeddedError.success ? Number(embeddedError.data.error.code) : NaN;
+            if (retryableStatus(status)) return new Response(null, { status, headers: response.headers });
+          } catch { /* Leave invalid provider payloads for the schema fallback below. */ }
+          return response;
+        }, { attempts: 2, baseDelayMs: 700, maxRetryAfterMs: Math.min(1200, Math.max(0, deadline - Date.now())), wait: this.delay });
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) throw new ProviderRequestError("OpenRouter", response.status, null);
+          if (response.status === 429) rateLimit = new ProviderRequestError("OpenRouter", response.status, response.headers.get("retry-after"));
+          else if (retryableStatus(response.status)) transientFailure = new ProviderRequestError("OpenRouter", response.status, response.headers.get("retry-after"));
+          if (response.status === 404 || retryableStatus(response.status)) continue;
+          throw new ProviderRequestError("OpenRouter", response.status, response.headers.get("retry-after"));
         }
-        if (attempt === 0 && Date.now() + 700 < deadline) await this.delay(700);
+        const raw: unknown = await response.json();
+        const providerError = providerErrorSchema.safeParse(raw);
+        if (!providerError.success) {
+          const parsed = completionSchema.safeParse(raw);
+          if (!parsed.success) continue;
+          try { return parseItems(parsed.data.choices[0].message.content); } catch { continue; }
+        }
+        const code = Number(providerError.data.error.code);
+        if (code === 401 || code === 403) throw new ProviderRequestError("OpenRouter", code, null);
+        if (code === 429) rateLimit = new ProviderRequestError("OpenRouter", code, null);
+      } catch (error) {
+        if (error instanceof ProviderRequestError && (error.status === 401 || error.status === 403)) throw new Error("Vision provider authorization failed.");
+        // A timeout, exhausted retry, or retired model can continue through the configured free fallback chain.
       }
     }
+    if (rateLimit) throw rateLimit;
+    if (transientFailure) throw transientFailure;
     throw new Error("Vision providers are temporarily unavailable. No list was created; try a text PDF or type the items.");
   }
 }

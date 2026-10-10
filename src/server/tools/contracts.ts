@@ -1,8 +1,9 @@
-import { toolCallSchema, type ToolCall } from "../../lib/ai/types/tool-call";
+import { toolCallSchema, type PendingClarification, type ToolCall } from "../../lib/ai/types/tool-call";
 
 export type ToolExecutionResult =
   | { ok: true; data: unknown }
-  | { ok: false; error: string };
+  | { ok: false; error: string }
+  | { ok: false; clarification: { question: string; pending: PendingClarification } };
 
 export interface TrustedToolExecutor {
   execute(call: ToolCall): Promise<ToolExecutionResult>;

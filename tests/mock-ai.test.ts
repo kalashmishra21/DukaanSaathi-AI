@@ -60,7 +60,7 @@ describe("MockAIProvider", () => {
     await expect(provider.reason({ text: "100 rupaye", pending: first.pending })).resolves.toMatchObject({
       kind: "tool_call", tool: { intent: "khata.openAccount", arguments: { customer: "Nandini", amountRupees: 100 } },
     });
-    await expect(provider.reason({ text: "kal aana", pending: first.pending })).resolves.toMatchObject({ kind: "unsupported" });
+    await expect(provider.reason({ text: "kal aana", pending: first.pending })).resolves.toMatchObject({ kind: "clarify", pending: first.pending });
   });
 
   it("uses a received ledger entry for Nandini's repayment", async () => {

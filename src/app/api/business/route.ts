@@ -1,5 +1,8 @@
 import { businessActionSchema, saleSchema } from "@/lib/business/schemas";
 import { getShopContext } from "@/server/data/context";
+import { enforceShopRateLimit } from "@/server/security/rate-limit";
+import { missingIdempotencyKey, readIdempotencyKey } from "@/server/security/idempotency";
+import { z } from "zod";
 
 export async function POST(request: Request) {
   let raw: unknown;
@@ -15,6 +18,15 @@ export async function POST(request: Request) {
   if (context.kind === "unavailable") return Response.json({ error: "Store data is temporarily unavailable." }, { status: 503 });
 
   const action = parsed.data;
+  const rateLimited = await enforceShopRateLimit(context, "business_action");
+  if (rateLimited) return rateLimited;
+  const idempotentActions = new Set([
+    "product.create", "product.adjust", "customer.create", "khata.add", "sale.record",
+    "supplier.create", "order.createDraft", "order.transition",
+  ]);
+  const idempotencyKey = readIdempotencyKey(request);
+  if (idempotentActions.has(action.kind) && !idempotencyKey) return missingIdempotencyKey();
+  const requestKey = idempotencyKey ?? crypto.randomUUID();
   if (action.kind === "shop.seed") {
     if (context.kind !== "no-shop") return Response.json({ error: "A shop is already connected." }, { status: 409 });
     const { data, error } = await context.client.rpc("bootstrap_demo_shop");
@@ -33,8 +45,8 @@ export async function POST(request: Request) {
 
   switch (action.kind) {
     case "product.create": {
-      const { data, error } = await client.rpc("create_product", {
-        p_shop_id: shop.id, p_name: action.name, p_sku: action.sku || null, p_unit: action.unit,
+      const { data, error } = await client.rpc("create_product_idempotent", {
+        p_shop_id: shop.id, p_request_key: requestKey, p_name: action.name, p_sku: action.sku || null, p_unit: action.unit,
         p_selling_price: action.sellingPrice, p_cost_price: action.costPrice ?? null,
         p_threshold: action.threshold, p_opening_stock: action.openingStock,
       });
@@ -52,8 +64,8 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, id: data.id });
     }
     case "product.adjust": {
-      const { data, error } = await client.rpc("adjust_stock", {
-        p_shop_id: shop.id, p_product_id: action.id, p_delta: action.delta, p_note: action.note || null,
+      const { data, error } = await client.rpc("adjust_stock_idempotent", {
+        p_shop_id: shop.id, p_request_key: requestKey, p_product_id: action.id, p_delta: action.delta, p_note: action.note || null,
       });
       if (error) return databaseError(error);
       return Response.json({ ok: true, currentStock: data });
@@ -68,43 +80,45 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, id: data.id });
     }
     case "customer.create": {
-      const { data, error } = await client.from("customers")
-        .insert({ shop_id: shop.id, name: action.name, phone: action.phone || null })
-        .select("id").single();
+      const { data, error } = await client.rpc("create_customer_idempotent", {
+        p_shop_id: shop.id, p_request_key: requestKey, p_name: action.name, p_phone: action.phone || null,
+      });
       if (error) return databaseError(error);
-      return Response.json({ ok: true, id: data.id });
+      return Response.json({ ok: true, id: data });
     }
     case "khata.add": {
       const { data: customer, error: customerError } = await client.from("customers")
         .select("id").eq("id", action.customerId).eq("shop_id", shop.id).maybeSingle();
       if (customerError) return databaseError(customerError);
       if (!customer) return Response.json({ error: "Customer not found." }, { status: 404 });
-      const { data, error } = await client.from("khata_entries").insert({
-        shop_id: shop.id, customer_id: action.customerId, type: action.type,
-        amount: action.amount, note: action.note || null,
-      }).select("id").single();
+      const { data, error } = await client.rpc("add_khata_entry_idempotent", {
+        p_shop_id: shop.id, p_request_key: requestKey, p_customer_id: action.customerId,
+        p_type: action.type, p_amount: action.amount, p_note: action.note || null,
+      });
       if (error) return databaseError(error);
-      return Response.json({ ok: true, id: data.id });
+      return Response.json({ ok: true, id: data });
     }
     case "sale.record": {
       if (new Set(action.items.map((item) => item.productId)).size !== action.items.length) {
         return Response.json({ error: "Select each product only once." }, { status: 422 });
       }
-      const { data: saleId, error } = await client.rpc("record_sale", {
-        p_shop_id: shop.id, p_items: action.items, p_payment_method: action.paymentMethod,
+      const { data: result, error } = await client.rpc("record_sale_idempotent", {
+        p_shop_id: shop.id, p_request_key: requestKey, p_items: action.items, p_payment_method: action.paymentMethod,
       });
       if (error) return databaseError(error);
+      const saleId = z.object({ saleId: z.uuid(), total: z.number().nonnegative() }).parse(result).saleId;
       const { data: sale, error: readError } = await client.from("sales")
         .select("id,total_amount,payment_method,created_at").eq("id", saleId).eq("shop_id", shop.id).single();
       if (readError) return Response.json({ error: "Sale saved, but confirmation could not be loaded. Check recent sales before retrying." }, { status: 500 });
       return Response.json({ ok: true, sale: saleSchema.parse(sale) });
     }
     case "supplier.create": {
-      const { data, error } = await client.from("suppliers").insert({
-        shop_id: shop.id, name: action.name, contact_name: action.contactName || null, phone: action.phone || null,
-      }).select("id").single();
+      const { data, error } = await client.rpc("create_supplier_idempotent", {
+        p_shop_id: shop.id, p_request_key: requestKey, p_name: action.name,
+        p_contact_name: action.contactName || null, p_phone: action.phone || null,
+      });
       if (error) return databaseError(error);
-      return Response.json({ ok: true, id: data.id });
+      return Response.json({ ok: true, id: data });
     }
     case "supplier.edit": {
       const { data, error } = await client.from("suppliers").update({
@@ -118,15 +132,15 @@ export async function POST(request: Request) {
       if (new Set(action.items.map((item) => item.productId)).size !== action.items.length) {
         return Response.json({ error: "Select each product only once." }, { status: 422 });
       }
-      const { data, error } = await client.rpc("create_purchase_order", {
-        p_shop_id: shop.id, p_supplier_id: action.supplierId, p_items: action.items, p_note: action.note || null,
+      const { data, error } = await client.rpc("create_purchase_order_idempotent", {
+        p_shop_id: shop.id, p_request_key: requestKey, p_supplier_id: action.supplierId, p_items: action.items, p_note: action.note || null,
       });
       if (error) return databaseError(error);
       return Response.json({ ok: true, id: data });
     }
     case "order.transition": {
-      const { data, error } = await client.rpc("transition_purchase_order", {
-        p_shop_id: shop.id, p_order_id: action.id, p_action: action.action,
+      const { data, error } = await client.rpc("transition_purchase_order_idempotent", {
+        p_shop_id: shop.id, p_request_key: requestKey, p_order_id: action.id, p_action: action.action,
       });
       if (error) return databaseError(error);
       return Response.json({ ok: true, status: data });
@@ -136,6 +150,7 @@ export async function POST(request: Request) {
 
 function databaseError(error: { code?: string; message: string }) {
   if (error.code === "23505") return Response.json({ error: "This name or SKU already exists." }, { status: 409 });
+  if (error.code === "22023" && /Idempotency key/i.test(error.message)) return Response.json({ error: "This retry key was already used for a different action. Submit the action again." }, { status: 409 });
   if (error.code === "23514" || error.code === "22023" || error.code === "22P02") {
     return Response.json({ error: "Check the entered values and try again." }, { status: 422 });
   }

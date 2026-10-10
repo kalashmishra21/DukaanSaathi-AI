@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { BusinessAction } from "@/lib/business/schemas";
 
@@ -9,15 +9,19 @@ export function useBusinessMutation() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const pendingRequest = useRef<{ signature: string; key: string } | null>(null);
 
   async function run(action: BusinessAction, success: string) {
     setBusy(true); setError(""); setNotice("");
     try {
+      const signature = JSON.stringify(action);
+      if (pendingRequest.current?.signature !== signature) pendingRequest.current = { signature, key: crypto.randomUUID() };
       const response = await fetch("/api/business", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(action),
+        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": pendingRequest.current.key }, body: signature,
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "The action failed.");
+      pendingRequest.current = null;
       setNotice(success);
       router.refresh();
       return body as Record<string, unknown>;

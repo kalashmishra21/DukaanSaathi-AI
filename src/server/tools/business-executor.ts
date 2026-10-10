@@ -1,5 +1,5 @@
 import { khataBalance, rupees } from "../../lib/business/calculations";
-import type { ToolCall } from "../../lib/ai/types/tool-call";
+import type { PendingClarification, ToolCall } from "../../lib/ai/types/tool-call";
 import type { TrustedToolExecutor, ToolExecutionResult } from "./contracts";
 import { matchShoppingList, type CatalogProduct } from "../../lib/assistant/match-shopping-list";
 
@@ -8,45 +8,87 @@ export type CustomerRecord = { id: string; name: string };
 export type LedgerRecord = { type: "gave" | "received"; amount: number };
 export type SupplierRecord = { id: string; name: string };
 export type ReorderRecord = { product: string; stock: number; threshold: number; quantity: number };
-export type OpenOrderRecord = { id: string; supplier: string; status: "draft" | "placed"; items: string[] };
+export type OrderStatus = "draft" | "placed" | "received" | "cancelled";
+export type OpenOrderRecord = { id: string; supplier: string; status: OrderStatus; items: string[] };
 
 export interface BusinessRepository {
   products(): Promise<ProductRecord[]>;
-  adjustStock(productId: string, delta: number): Promise<number>;
+  createProduct(input: { name: string; unit: string; sellingPrice: number; openingStock: number; threshold: number }, requestKey: string): Promise<ProductRecord>;
+  adjustStock(productId: string, delta: number, requestKey: string): Promise<number>;
   customers(): Promise<CustomerRecord[]>;
-  createCustomer(name: string): Promise<string>;
-  openAccount(name: string, amount: number): Promise<string>;
+  createCustomer(name: string, requestKey: string): Promise<string>;
+  openAccount(name: string, amount: number, requestKey: string): Promise<string>;
   ledger(customerId: string): Promise<LedgerRecord[]>;
-  addEntry(customerId: string, type: "gave" | "received", amount: number, note?: string): Promise<void>;
+  addEntry(customerId: string, type: "gave" | "received", amount: number, note: string | undefined, requestKey: string): Promise<void>;
   dailySales(date: string): Promise<{ total: number; count: number }>;
-  recordSale(items: { productId: string; quantity: number }[], paymentMethod: "cash" | "upi" | "card"): Promise<{ saleId: string; total: number }>;
+  recordSale(items: { productId: string; quantity: number }[], paymentMethod: "cash" | "upi" | "card", requestKey: string): Promise<{ saleId: string; total: number }>;
   suppliers(): Promise<SupplierRecord[]>;
-  createSupplier(name: string): Promise<string>;
+  createSupplier(name: string, requestKey: string): Promise<string>;
   reorderSuggestions(): Promise<ReorderRecord[]>;
   openOrders(): Promise<OpenOrderRecord[]>;
-  createOrderDraft(supplierId: string, items: { productId: string; quantity: number }[]): Promise<string>;
+  orders(): Promise<OpenOrderRecord[]>;
+  createOrderDraft(supplierId: string, items: { productId: string; quantity: number }[], requestKey: string): Promise<{ id: string; status: OrderStatus }>;
+  transitionOrder(orderId: string, expectedStatus: OrderStatus, action: "place" | "receive" | "cancel", requestKey: string): Promise<OrderStatus>;
+}
+
+function normalizedName(value: string): string {
+  return value.toLocaleLowerCase("en-IN").normalize("NFKC").replace(/\bji\b/gu, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
 
 function matchByName<T extends { name: string }>(records: T[], rawName: string): T | null {
-  const requested = rawName.toLocaleLowerCase("en-IN").replace(/\bji\b/g, "").trim();
-  const exact = records.find((record) => record.name.toLocaleLowerCase("en-IN") === requested);
+  const requested = normalizedName(rawName);
+  const exact = records.find((record) => normalizedName(record.name) === requested);
   if (exact) return exact;
-  const matches = records.filter((record) =>
-    record.name.toLocaleLowerCase("en-IN").split(/\s+/).includes(requested));
+  const matches = records.filter((record) => {
+    const words = normalizedName(record.name).split(/\s+/u);
+    return requested.split(/\s+/u).length === 1 ? words.includes(requested) : normalizedName(record.name).includes(requested);
+  });
   if (matches.length > 1) throw new Error("More than one record matches that name. Use the full name.");
   return matches[0] ?? null;
 }
 
+function matchingOrders(orders: OpenOrderRecord[], rawQuery: string): OpenOrderRecord[] {
+  const query = rawQuery.replace(/^(?:purchase\s+)?order\s*/i, "").replace(/^#/, "").trim().toLocaleLowerCase("en-IN");
+  const normalized = normalizedName(query);
+  return orders.filter((order) => order.id.toLocaleLowerCase().startsWith(query)
+    || normalizedName(order.supplier) === normalized
+    || normalizedName(order.supplier).includes(normalized)
+    || order.items.some((item) => normalizedName(item).includes(normalized)));
+}
+
+function canTransition(status: OrderStatus, action: "place" | "receive" | "cancel"): boolean {
+  return action === "place" ? status === "draft" : action === "receive" ? status === "placed" : status === "draft" || status === "placed";
+}
+
+function transitionPast(action: "place" | "receive" | "cancel"): string {
+  return action === "place" ? "placed" : action === "receive" ? "received" : "cancelled";
+}
+
+function clarificationResult(question: string, pending: PendingClarification): ToolExecutionResult {
+  return { ok: false, clarification: { question, pending } };
+}
+
 export class BusinessToolExecutor implements TrustedToolExecutor {
-  constructor(private readonly repository: BusinessRepository) {}
+  constructor(private readonly repository: BusinessRepository, private readonly requestKey: string = crypto.randomUUID()) {}
 
   async execute(call: ToolCall): Promise<ToolExecutionResult> {
     try {
       switch (call.intent) {
+        case "product.create": {
+          const existing = matchByName(await this.repository.products(), call.arguments.name);
+          if (existing) return clarificationResult(`A product named ${existing.name} already exists. Should I add ${call.arguments.openingStock} to its stock instead? Nothing has changed.`, {
+            kind: "product-existing-confirm", product: existing.name, delta: call.arguments.openingStock,
+          });
+          const product = await this.repository.createProduct({
+            name: call.arguments.name, unit: call.arguments.unit, sellingPrice: call.arguments.sellingPrice,
+            openingStock: call.arguments.openingStock, threshold: call.arguments.threshold,
+          }, this.requestKey);
+          return { ok: true, data: { intent: call.intent, product: product.name, unit: product.unit, sellingPrice: product.sellingPrice, stock: product.currentStock } };
+        }
         case "inventory.adjust": {
           const product = matchByName(await this.repository.products(), call.arguments.product);
           if (!product) return { ok: false, error: "Product not found." };
-          const newStock = await this.repository.adjustStock(product.id, call.arguments.delta);
+          const newStock = await this.repository.adjustStock(product.id, call.arguments.delta, this.requestKey);
           return { ok: true, data: { intent: call.intent, product: product.name, delta: call.arguments.delta, newStock } };
         }
         case "inventory.getStock": {
@@ -61,13 +103,13 @@ export class BusinessToolExecutor implements TrustedToolExecutor {
         case "customer.create": {
           const existing = matchByName(await this.repository.customers(), call.arguments.customer);
           if (existing) return { ok: false, error: "A customer with that name already exists." };
-          const id = await this.repository.createCustomer(call.arguments.customer);
+          const id = await this.repository.createCustomer(call.arguments.customer, this.requestKey);
           return { ok: true, data: { intent: call.intent, customer: call.arguments.customer, id } };
         }
         case "khata.openAccount": {
           const existing = matchByName(await this.repository.customers(), call.arguments.customer);
           if (existing) return { ok: false, error: "A customer with that name already exists." };
-          const id = await this.repository.openAccount(call.arguments.customer, call.arguments.amountRupees);
+          const id = await this.repository.openAccount(call.arguments.customer, call.arguments.amountRupees, this.requestKey);
           return { ok: true, data: { intent: call.intent, customer: call.arguments.customer, id, balance: call.arguments.amountRupees } };
         }
         case "khata.getBalance": {
@@ -78,8 +120,12 @@ export class BusinessToolExecutor implements TrustedToolExecutor {
         }
         case "khata.addEntry": {
           const customer = matchByName(await this.repository.customers(), call.arguments.customer);
-          if (!customer) return { ok: false, error: "Customer not found." };
-          await this.repository.addEntry(customer.id, call.arguments.type, call.arguments.amountRupees, call.arguments.note);
+          if (!customer && call.arguments.type === "gave") return clarificationResult(
+            `${call.arguments.customer} is not in the customer list. Should I open a new khata with ${rupees(call.arguments.amountRupees)}? Nothing has been saved.`,
+            { kind: "khata-create-confirm", customer: call.arguments.customer, amountRupees: call.arguments.amountRupees },
+          );
+          if (!customer) return { ok: false, error: "Customer not found. Add the customer before recording a repayment." };
+          await this.repository.addEntry(customer.id, call.arguments.type, call.arguments.amountRupees, call.arguments.note, this.requestKey);
           const balance = khataBalance(await this.repository.ledger(customer.id));
           return { ok: true, data: { intent: call.intent, customer: customer.name, type: call.arguments.type, amount: call.arguments.amountRupees, balance } };
         }
@@ -87,7 +133,7 @@ export class BusinessToolExecutor implements TrustedToolExecutor {
           if (new Set(call.arguments.items.map((item) => item.productId)).size !== call.arguments.items.length) {
             return { ok: false, error: "The basket repeats a product." };
           }
-          const sale = await this.repository.recordSale(call.arguments.items, call.arguments.paymentMethod);
+          const sale = await this.repository.recordSale(call.arguments.items, call.arguments.paymentMethod, this.requestKey);
           return { ok: true, data: { intent: call.intent, ...sale } };
         }
         case "sales.getDailySummary": {
@@ -105,12 +151,40 @@ export class BusinessToolExecutor implements TrustedToolExecutor {
         case "supplier.create": {
           const existing = matchByName(await this.repository.suppliers(), call.arguments.name);
           if (existing) return { ok: false, error: "A supplier with that name already exists." };
-          const id = await this.repository.createSupplier(call.arguments.name);
+          const id = await this.repository.createSupplier(call.arguments.name, this.requestKey);
           return { ok: true, data: { intent: call.intent, supplier: call.arguments.name, id } };
         }
         case "orders.getOpen": {
           const orders = await this.repository.openOrders();
           return { ok: true, data: { intent: call.intent, orders } };
+        }
+        case "orders.getStatus": {
+          const matches = matchingOrders(await this.repository.orders(), call.arguments.order);
+          if (!matches.length) return { ok: false, error: "No matching purchase order was found in this shop." };
+          return { ok: true, data: { intent: call.intent, orders: matches } };
+        }
+        case "orders.transition": {
+          const matches = matchingOrders(await this.repository.orders(), call.arguments.order);
+          if (!matches.length) return { ok: false, error: "No matching purchase order was found in this shop." };
+          if (matches.length > 1) {
+            const candidates = matches.slice(0, 10).map((order) => ({ id: order.id, label: `${order.supplier} · #${order.id.slice(0, 8)}`, status: order.status }));
+            return clarificationResult(`More than one order matches. Choose one of the listed IDs before I ask for confirmation.`, {
+              kind: "order-transition-select", query: call.arguments.order, action: call.arguments.action, candidates,
+            });
+          }
+          const order = matches[0];
+          if (!canTransition(order.status, call.arguments.action)) return { ok: false, error: `This order is ${order.status} and cannot be ${transitionPast(call.arguments.action)}.` };
+          const orderLabel = `${order.supplier} · #${order.id.slice(0, 8)}`;
+          const pending: PendingClarification = { kind: "order-transition-confirm", orderId: order.id, orderLabel, currentStatus: order.status, action: call.arguments.action };
+          return clarificationResult(`${call.arguments.action === "place" ? "Mark" : call.arguments.action === "receive" ? "Receive goods for" : "Cancel"} ${orderLabel}, currently ${order.status}? Reply yes or cancel. Receiving increases stock once; placing is internal and does not contact the supplier. No order was changed.`, pending);
+        }
+        case "orders.transitionConfirmed": {
+          const order = (await this.repository.orders()).find((candidate) => candidate.id === call.arguments.orderId);
+          if (!order) return { ok: false, error: "That purchase order is no longer available in this shop." };
+          if (order.status !== call.arguments.expectedStatus) return { ok: false, error: `The order changed from ${call.arguments.expectedStatus} to ${order.status} while you were deciding. Check its current status before trying again.` };
+          if (!canTransition(order.status, call.arguments.action)) return { ok: false, error: `The order is now ${order.status}; the requested action is no longer valid.` };
+          const status = await this.repository.transitionOrder(order.id, call.arguments.expectedStatus, call.arguments.action, this.requestKey);
+          return { ok: true, data: { intent: call.intent, supplier: order.supplier, orderId: order.id, action: call.arguments.action, status } };
         }
         case "orders.createDraft": {
           const [suppliers, products] = await Promise.all([this.repository.suppliers(), this.repository.products()]);
@@ -122,8 +196,8 @@ export class BusinessToolExecutor implements TrustedToolExecutor {
             return { productId: product.id, quantity: item.quantity };
           });
           if (new Set(items.map((item) => item.productId)).size !== items.length) return { ok: false, error: "The order repeats a product." };
-          const id = await this.repository.createOrderDraft(supplier.id, items);
-          return { ok: true, data: { intent: call.intent, supplier: supplier.name, itemCount: items.length, id } };
+          const order = await this.repository.createOrderDraft(supplier.id, items, this.requestKey);
+          return { ok: true, data: { intent: call.intent, supplier: supplier.name, itemCount: items.length, id: order.id, status: order.status } };
         }
       }
     } catch (error) {
@@ -133,6 +207,7 @@ export class BusinessToolExecutor implements TrustedToolExecutor {
 }
 
 export function describeToolResult(result: ToolExecutionResult): { title: string; detail: string; reply: string } {
+  if ("clarification" in result) return { title: "One detail needed", detail: "No store action has been taken.", reply: result.clarification.question };
   if (!result.ok) {
     if (result.error.startsWith("Sale may have been saved.")) {
       return { title: "Sale needs verification", detail: result.error, reply: result.error };
@@ -141,6 +216,8 @@ export function describeToolResult(result: ToolExecutionResult): { title: string
   }
   const data = result.data as Record<string, unknown>;
   switch (data.intent) {
+    case "product.create":
+      return { title: "Product added", detail: `${data.product} · ${data.stock} ${data.unit} · ${rupees(Number(data.sellingPrice))} each`, reply: `${data.product} was created with ${data.stock} ${data.unit} in opening stock. This result is from the store database.` };
     case "inventory.checkList": {
       const draft = data.draft as { items: { status: string }[]; estimatedTotal: number; canConfirm: boolean };
       const available = draft.items.filter((item) => item.status === "available").length;
@@ -178,8 +255,19 @@ export function describeToolResult(result: ToolExecutionResult): { title: string
       const orders = data.orders as OpenOrderRecord[];
       return { title: "Open purchase orders", detail: `${orders.length} draft or placed`, reply: orders.length ? `You have ${orders.length} open purchase order(s): ${orders.map((item) => `${item.supplier} (${item.status})`).join(", ")}.` : "There are no open purchase orders." };
     }
+    case "orders.getStatus": {
+      const orders = data.orders as OpenOrderRecord[];
+      return { title: orders.length === 1 ? "Purchase order status" : "Matching purchase orders", detail: `${orders.length} order(s)`, reply: orders.map((order) => `${order.supplier} · #${order.id.slice(0, 8)} · ${order.status}`).join(". ") };
+    }
+    case "orders.transitionConfirmed": {
+      const action = String(data.action);
+      const status = String(data.status);
+      const actionText = action === "place" ? "marked placed" : action === "receive" ? "received" : "cancelled";
+      const disclosure = action === "place" ? " This is an internal status; no supplier was contacted." : action === "receive" ? " The database recorded the receipt and stock movement atomically." : "";
+      return { title: `Order ${status}`, detail: `${data.supplier} · #${String(data.orderId).slice(0, 8)} · ${status}`, reply: `${data.supplier}'s purchase order was ${actionText}; its saved status is ${status}.${disclosure}` };
+    }
     case "orders.createDraft":
-      return { title: "Purchase order drafted", detail: `${data.supplier} · ${data.itemCount} product(s)`, reply: `An internal purchase order draft for ${data.supplier} was saved. No supplier was contacted and stock was not changed.` };
+      return { title: `Purchase order ${data.status}`, detail: `${data.supplier} · ${data.itemCount} product(s) · ${data.status}`, reply: `An internal purchase order draft for ${data.supplier} was saved with status ${data.status}. No supplier was contacted and stock was not changed.` };
     default:
       throw new Error("Unknown authoritative tool result.");
   }

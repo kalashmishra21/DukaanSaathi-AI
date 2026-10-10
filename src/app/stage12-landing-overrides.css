@@ -89,6 +89,22 @@ html[data-theme="light"] .stage12-landing .site-header .saathi-wordmark small { 
   box-shadow: 0 22px 48px #06140d2c;
   overflow: hidden;
 }
+.stage12-landing .demo-console-loading {
+  display: flex;
+  min-height: 480px;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  color: #d7decf;
+  font-size: 13px;
+}
+.stage12-landing .story,
+.stage12-landing .studio,
+.stage12-landing #voice-demo,
+.stage12-landing .closing {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 920px;
+}
 .stage12-landing .demo-console .demo-response { background: #f2ebdc; color: #203a29; }
 .stage12-landing .demo-console .demo-response strong { color: #203a29; }
 .stage12-landing .demo-console .demo-response p { color: #405849; }

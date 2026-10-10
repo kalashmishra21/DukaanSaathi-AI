@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ArrowDown, ArrowUpRight } from "lucide-react";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SaathiCore } from "@/components/landing/saathi-core";
-import { LandingVoiceDemo } from "@/components/landing/voice-demo";
+import { DeferredLandingVoiceDemo } from "@/components/landing/deferred-voice-demo";
 import { LandingStory } from "@/components/landing/landing-story";
 import { publicSiteUrl } from "@/lib/seo/site-url";
 import "./stage12-landing.css";
@@ -86,7 +86,7 @@ export default function Home() {
       <section id="voice-demo" className="landing-demo-section" aria-labelledby="demo-title">
         <div className="landing-frame landing-demo-grid">
           <div className="landing-demo-intro"><p className="landing-eyebrow">REAL AUDIO · MOCK UNDERSTANDING</p><h2 id="demo-title">Hear the words.<br /><em>See the intent.</em></h2><p>Play one of four locally served Gnani voice samples. The structured results shown here are previews; this page never changes store data.</p><Link className="landing-text-link dark" href="/signin?mode=signup">Try the assistant <ArrowUpRight size={18} aria-hidden="true" /></Link></div>
-          <LandingVoiceDemo />
+          <DeferredLandingVoiceDemo />
         </div>
       </section>
 

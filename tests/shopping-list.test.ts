@@ -28,7 +28,8 @@ describe("shopping-list extraction and draft boundary", () => {
     const valid: typeof fetch = async () => Response.json({ choices: [{ message: { content: '{"items":[{"product":"Maggi","quantity":2}]}' } }] });
     await expect(new OpenRouterVisionExtractor("test-key", "test:free", valid).extract(image)).resolves.toEqual([{ product: "Maggi", quantity: 2 }]);
     const embeddedError: typeof fetch = async () => Response.json({ error: { code: 502, message: "Upstream unavailable" } });
-    await expect(new OpenRouterVisionExtractor("test-key", "test:free", embeddedError, [], async () => {}).extract(image)).rejects.toThrow("temporarily unavailable");
+    await expect(new OpenRouterVisionExtractor("test-key", "test:free", embeddedError, [], async () => {}).extract(image))
+      .rejects.toMatchObject({ status: 502 });
     const invalid: typeof fetch = async () => Response.json({ choices: [{ message: { content: '{"items":[{"product":"Maggi","quantity":"2"}]}' } }] });
     await expect(new OpenRouterVisionExtractor("test-key", "test:free", invalid).extract(image)).rejects.toThrow();
   });
@@ -56,7 +57,7 @@ describe("shopping-list extraction and draft boundary", () => {
       .resolves.toEqual([{ product: "Maggi", quantity: 3 }]);
     const unavailable: typeof fetch = async () => new Response("", { status: 503 });
     await expect(new OpenRouterVisionExtractor("test-key", "primary:free", unavailable, ["fallback:free"], async () => {}).extract(image))
-      .rejects.toThrow("No list was created");
+      .rejects.toMatchObject({ status: 503 });
   });
 
   it("stops on provider authorization failure without trying another model", async () => {

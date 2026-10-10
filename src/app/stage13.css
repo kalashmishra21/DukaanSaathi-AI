@@ -1,0 +1,256 @@
+/* Stage 13: richer studio tokens and tactile capsule navigation. */
+.workspace-shell {
+  --ws-bg: #eee5d4;
+  --ws-surface: #fbf5e9;
+  --ws-elevated: #fff9ed;
+  --ws-ink: #1c3427;
+  --ws-muted: #425d49;
+  --ws-subtle: #536b59;
+  --ws-line: #bdc9b9;
+  --ws-field: #fffaf1;
+  --ws-deep: #1a3928;
+  --ws-deep-ink: #fcf4e5;
+  --ws-accent: #8e512f;
+  --ws-copper: #bd794a;
+  --ws-positive: #236342;
+  --ws-negative: #984634;
+  --ws-positive-bg: #e3eddf;
+  --ws-warning-bg: #f5e6d2;
+  --ws-error-bg: #f8e5db;
+  --ws-shadow: 0 22px 56px #26392b24;
+  background:
+    radial-gradient(ellipse at 87% -10%, #c5d0b866, transparent 36rem),
+    linear-gradient(135deg, #f2e9d8 0%, var(--ws-bg) 68%);
+}
+
+html[data-theme="dark"] .workspace-shell {
+  --ws-bg: #12231a;
+  --ws-surface: #1c3225;
+  --ws-elevated: #263d2d;
+  --ws-ink: #f5efdf;
+  --ws-muted: #d1ddcd;
+  --ws-subtle: #b9c9b6;
+  --ws-line: #4d6c52;
+  --ws-field: #182b20;
+  --ws-deep: #10271b;
+  --ws-deep-ink: #f6ecd9;
+  --ws-accent: #e0ae78;
+  --ws-copper: #d79761;
+  --ws-positive: #a8ddb0;
+  --ws-negative: #f2b5a0;
+  --ws-positive-bg: #284a35;
+  --ws-warning-bg: #493829;
+  --ws-error-bg: #4b3029;
+  --ws-shadow: 0 24px 58px #050e09a3;
+  background:
+    radial-gradient(ellipse at 88% -12%, #31563b6b, transparent 36rem),
+    radial-gradient(ellipse at 10% 76%, #1a3828b0, transparent 48rem),
+    linear-gradient(125deg, #13271d 0%, #102018 58%, #182a1f 100%);
+}
+
+html[data-theme="light"] .stage12-landing {
+  --s12-page-bg: #f4eddf;
+  --s12-ink: #1b3828;
+  --s12-muted: #49624d;
+  --s12-faint: #5e745f;
+  --s12-line: #b6c2ae;
+  --s12-header: #f6f0e4e8;
+  --s12-header-border: #aebba8;
+  --s12-hero-glow: #d5c9aa;
+  --s12-hero-panel: #e7dcc8;
+  --s12-hero-panel-edge: #b5a58a;
+  --s12-studio-bg: #f4eddf;
+  --s12-bento-bg: #fff9ed;
+  --s12-bento-raised: #e7e1d0;
+  --s12-bento-line: #bac5b3;
+  --s12-bento-muted: #526b54;
+  --s12-button: #244b32;
+  --s12-button-ink: #fff5e5;
+  --s12-focus: #935630;
+}
+
+html[data-theme="dark"] .stage12-landing {
+  --s12-page-bg: #102319;
+  --s12-ink: #f7f0e1;
+  --s12-muted: #c8d6c3;
+  --s12-faint: #aec2ae;
+  --s12-line: #45674c;
+  --s12-header: #142b1fea;
+  --s12-header-border: #55735a;
+  --s12-hero-glow: #315b39;
+  --s12-hero-panel: #183224;
+  --s12-hero-panel-edge: #5b795e;
+  --s12-studio-bg: #11251b;
+  --s12-bento-bg: #1b3627;
+  --s12-bento-raised: #294735;
+  --s12-bento-line: #4c6c51;
+  --s12-bento-muted: #c4d3bf;
+  --s12-button: #d4a16a;
+  --s12-button-ink: #18291d;
+  --s12-focus: #f1bf83;
+}
+
+/* The landing capsule is sticky because LiquidGL intentionally skips fixed layers. */
+.stage12-landing .site-header.landing-header.liquid-header {
+  position: sticky;
+  top: 12px;
+  z-index: 42;
+  width: min(calc(100% - 64px), 1420px);
+  min-height: 70px;
+  height: auto;
+  margin: 12px auto 0;
+  padding: 0;
+  overflow: visible;
+  border: 1px solid var(--s12-header-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--s12-header) 78%, transparent);
+  box-shadow: 0 12px 36px #07160d26, inset 0 1px #ffffff19;
+  backdrop-filter: blur(24px) saturate(145%);
+  -webkit-backdrop-filter: blur(24px) saturate(145%);
+  transition: border-color 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms cubic-bezier(.2,.8,.2,1);
+}
+.stage12-landing .liquid-header-content {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  min-height: 68px;
+  padding: 7px 10px 7px 18px;
+}
+.stage12-landing .liquid-header .landing-nav { margin-left: auto; margin-right: 0; gap: 8px; }
+.stage12-landing .liquid-header .landing-nav a {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 15px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--s12-muted);
+  font-size: 12px;
+  font-weight: 700;
+  transition: color 170ms cubic-bezier(.2,.8,.2,1), background-color 170ms cubic-bezier(.2,.8,.2,1), border-color 170ms cubic-bezier(.2,.8,.2,1);
+}
+.stage12-landing .liquid-header .landing-nav a:hover { color: var(--s12-ink); background: #8bab8623; border-color: #8bab8640; }
+.stage12-landing .liquid-header .landing-account-actions { gap: 7px; margin-left: 2px; }
+.stage12-landing .liquid-header .landing-account-actions a {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 15px;
+  border-radius: 999px;
+  font-size: 12px;
+  transition: color 170ms cubic-bezier(.2,.8,.2,1), background-color 170ms cubic-bezier(.2,.8,.2,1), border-color 170ms cubic-bezier(.2,.8,.2,1), transform 170ms cubic-bezier(.2,.8,.2,1);
+}
+.stage12-landing .liquid-header .landing-account-actions > a:first-child { border-color: #8ca28c80; background: #13271d25; }
+.stage12-landing .liquid-header .landing-account-actions .header-link { border-color: #d5a16b; background: #d5a16b; color: #1b2b20; }
+.stage12-landing .liquid-header .landing-account-actions a:hover { border-color: #e1b985; color: var(--s12-ink); }
+.stage12-landing .liquid-header .landing-account-actions .header-link:hover { background: #e2b883; color: #17261b; }
+html[data-theme="light"] .stage12-landing .liquid-header .landing-account-actions > a:first-child { color: #233d2c; }
+html[data-theme="light"] .stage12-landing .liquid-header .landing-account-actions .header-link { background: #244b32; border-color: #244b32; color: #fff5e5; }
+html[data-theme="light"] .stage12-landing .liquid-header .landing-account-actions .header-link:hover { background: #315e3e; color: #fff9eb; }
+
+/* LiquidGL owns refraction; this remains a complete CSS fallback. */
+.stage12-landing .liquid-header::before {
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(145deg, #ffffff22, transparent 33%, #85a48213 70%, #d5a16b12);
+}
+.stage12-landing .liquid-header:focus-within,
+.stage12-landing .liquid-header:hover { border-color: color-mix(in srgb, var(--s12-copper) 74%, var(--s12-header-border)); box-shadow: 0 15px 42px #07160d33, inset 0 1px #ffffff28; }
+
+/* Night Bazaar sidebar: deep forest body with raised, pill-shaped destinations. */
+.workspace-sidebar {
+  background:
+    radial-gradient(ellipse at 0% 0%, #2e573b 0%, transparent 40%),
+    linear-gradient(160deg, #173323 0%, #10261b 52%, #142b1e 100%);
+  border-right-color: #456b4e;
+  box-shadow: inset -1px 0 #ffffff0b, 16px 0 40px #13251a0c;
+}
+html[data-theme="dark"] .workspace-sidebar { background: radial-gradient(ellipse at 0% 0%, #315e3f 0%, transparent 40%), linear-gradient(160deg, #183624, #10231a 56%, #142b1e); }
+.workspace-sidebar-head .workspace-brand { min-height: 46px; padding: 4px 7px !important; gap: 9px; border-radius: 15px; }
+.workspace-sidebar-head .workspace-brand .saathi-brand-symbol { filter: drop-shadow(0 3px 8px #050d0870); }
+.workspace-sidebar-head .workspace-brand .saathi-wordmark { letter-spacing: -.045em; }
+.sidebar-icon-button { width: 38px; height: 38px; border-radius: 50%; color: #cbd9c8; background: #ffffff07; border-color: #c3d8c31c; transition: color 160ms ease-out, background-color 160ms ease-out, border-color 160ms ease-out, transform 160ms ease-out; }
+.sidebar-icon-button:hover { color: #fff5e6; background: #9bb89d24; border-color: #b8d0ba40; transform: translateX(1px); }
+.workspace-sidebar .workspace-nav { gap: 0; margin-top: 27px; }
+.workspace-nav-group { gap: 5px; padding-bottom: 18px; }
+.workspace-nav-group + .workspace-nav-group { padding-top: 16px; border-top-color: #a9c3a41e; }
+.workspace-nav-label { margin: 0 13px 8px; color: #a9c1aa; font-size: 9px; letter-spacing: .17em; }
+.workspace-nav a {
+  position: relative;
+  min-height: 45px;
+  padding: 9px 13px;
+  gap: 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: #c1d0c0;
+  transition: color 170ms cubic-bezier(.2,.8,.2,1), background-color 170ms cubic-bezier(.2,.8,.2,1), border-color 170ms cubic-bezier(.2,.8,.2,1), box-shadow 170ms cubic-bezier(.2,.8,.2,1), transform 170ms cubic-bezier(.2,.8,.2,1);
+}
+.workspace-nav a svg { transition: transform 170ms cubic-bezier(.2,.8,.2,1), color 170ms cubic-bezier(.2,.8,.2,1); }
+.workspace-nav a:hover { background: #96b69716; border-color: #bfd3bf26; color: #fff3df; box-shadow: inset 0 1px #ffffff12; }
+.workspace-nav a:hover svg { color: #ecc08e; transform: translateX(1px); }
+.workspace-nav a[aria-current="page"] {
+  color: #fff0d7;
+  background: linear-gradient(105deg, #b77d4a39, #8cab8025 65%, #8cab8019);
+  border-color: #d3a16d50;
+  box-shadow: inset 0 1px #ffffff15, 0 6px 16px #07160b1f;
+}
+.workspace-nav a[aria-current="page"] svg { color: #e7b47d; }
+.workspace-sidebar-bottom { padding: 14px 6px 0; border-top: 1px solid #a9c3a41e; }
+.workspace-sidebar-bottom .workspace-voice-glyph { width: 36px; height: 36px; border: 1px solid #d2a36b5c; border-radius: 50%; background: #d49b6415; color: #e6b17a; }
+.workspace-sidebar-bottom strong { color: #f1ead9; font-size: 15px; }
+.workspace-sidebar-bottom p { color: #b7c6b3; }
+.workspace-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 18;
+  background: color-mix(in srgb, var(--ws-surface) 91%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--ws-line) 78%, transparent);
+  backdrop-filter: blur(16px) saturate(125%);
+  -webkit-backdrop-filter: blur(16px) saturate(125%);
+}
+.profile-trigger { border-radius: 999px; border-color: color-mix(in srgb, var(--ws-line) 74%, var(--ws-copper)); box-shadow: 0 5px 15px #13251a12, inset 0 1px #ffffff35; transition: border-color 160ms ease-out, box-shadow 160ms ease-out, transform 160ms ease-out; }
+.profile-trigger:hover, .profile-trigger[aria-expanded="true"] { box-shadow: 0 8px 20px #13251a1c, inset 0 1px #ffffff45; transform: translateY(-1px); }
+.overview-ask, .metric, .overview-work-panel, .conversation-panel, .assistant-context {
+  border-color: color-mix(in srgb, var(--ws-line) 82%, transparent);
+  box-shadow: 0 14px 34px #10251b16;
+}
+html[data-theme="dark"] .workspace-shell :is(.overview-ask, .metric, .overview-work-panel, .conversation-panel, .assistant-context) { box-shadow: 0 16px 38px #050e0940; }
+.metric { background: linear-gradient(145deg, var(--ws-elevated), color-mix(in srgb, var(--ws-surface) 83%, var(--ws-positive-bg))); }
+.overview-work-panel { background: color-mix(in srgb, var(--ws-surface) 88%, transparent); }
+.business-page :is(button, input, select, textarea):focus-visible,
+.workspace-shell :is(a, button):focus-visible { outline: 2px solid var(--ws-copper); outline-offset: 3px; }
+
+@media (max-width: 900px) {
+  .stage12-landing .site-header.landing-header.liquid-header { width: calc(100% - 32px); min-height: 62px; top: 8px; margin-top: 8px; }
+  .stage12-landing .liquid-header-content { min-height: 60px; gap: 9px; padding: 6px 7px 6px 12px; }
+}
+@media (max-width: 650px) {
+  .stage12-landing .site-header.landing-header.liquid-header { width: calc(100% - 24px); min-height: 57px; }
+  .stage12-landing .liquid-header-content { min-height: 55px; padding-inline: 9px 6px; }
+  .stage12-landing .liquid-header .brand { font-size: 13px; gap: 5px; }
+  .stage12-landing .liquid-header .saathi-brand-symbol { width: 28px; height: 28px; }
+  .stage12-landing .liquid-header .landing-account-actions { gap: 5px; }
+  .stage12-landing .liquid-header .landing-account-actions a { min-height: 39px; padding-inline: 10px; font-size: 10px; }
+  html[data-sidebar="collapsed"] .workspace-shell { grid-template-columns: minmax(0,1fr); }
+}
+@media (hover: hover) and (pointer: fine) {
+  .workspace-nav a:hover { transform: translateX(2px); }
+  .stage12-landing .liquid-header .landing-account-actions a:hover { transform: translateY(-1px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-nav a, .workspace-nav a svg, .profile-trigger, .sidebar-icon-button,
+  .stage12-landing .liquid-header, .stage12-landing .liquid-header .landing-nav a,
+  .stage12-landing .liquid-header .landing-account-actions a { transition-duration: .01ms; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .workspace-topbar { background: var(--ws-surface); backdrop-filter: none; }
+  .stage12-landing .site-header.landing-header.liquid-header { background: var(--s12-page-bg); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}

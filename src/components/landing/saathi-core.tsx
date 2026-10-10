@@ -73,7 +73,7 @@ export function SaathiCore() {
   const orbit = useRef<HTMLDivElement>(null);
   const index = useRef(0);
   const onSceneReady = useCallback(() => setRendered(true), []);
-  const onSceneLost = useCallback(() => setRendered(false), []);
+  const onSceneLost = useCallback(() => { setRendered(false); setCanRender(false); }, []);
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
     const mobile = window.matchMedia("(max-width: 650px)");

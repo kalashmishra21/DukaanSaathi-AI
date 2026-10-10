@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { AIProvider, ReasoningInput, SpeechResult, TranscriptionInput, TranscriptionResult } from "../types/provider";
 import type { ReasoningResult } from "../types/tool-call";
 import { MockAIProvider } from "./mock";
+import { ProviderRequestError } from "../provider-http";
 
 // Official REST API: https://docs.gnani.ai/api/STT/speech-to-text
 const STT_URL = "https://api.vachana.ai/stt/v3";
@@ -26,7 +27,7 @@ export class GnaniVoiceProvider implements AIProvider {
       method: "POST", headers: { "X-API-Key-ID": this.key }, body: form,
       signal: AbortSignal.timeout(20_000), cache: "no-store",
     });
-    if (!response.ok) throw new Error(`Gnani Prisma transcription failed (${response.status}).`);
+    if (!response.ok) throw new ProviderRequestError("Gnani Prisma", response.status, response.headers.get("retry-after"));
     const parsed = transcriptSchema.safeParse(await response.json());
     if (!parsed.success) throw new Error("Gnani Prisma returned an invalid transcript.");
     return { text: parsed.data.transcript, language };
@@ -49,7 +50,7 @@ export class GnaniVoiceProvider implements AIProvider {
       }),
       signal: AbortSignal.timeout(20_000), cache: "no-store",
     });
-    if (!response.ok) throw new Error(`Gnani Timbre synthesis failed (${response.status}).`);
+    if (!response.ok) throw new ProviderRequestError("Gnani Timbre", response.status, response.headers.get("retry-after"));
     if (!response.headers.get("content-type")?.startsWith("audio/")) throw new Error("Gnani Timbre returned non-audio data.");
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length < 44 || bytes.length > 5_000_000) throw new Error("Gnani Timbre returned invalid audio.");

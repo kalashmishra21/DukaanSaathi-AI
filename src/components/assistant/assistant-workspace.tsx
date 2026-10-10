@@ -30,8 +30,9 @@ const transcriptSchema = z.object({ text: z.string().trim().min(1), language: z.
 const errorSchema = z.object({ error: z.string().min(1).max(250) });
 const pause = (duration: number) => new Promise((resolve) => setTimeout(resolve, duration));
 
-export function AssistantWorkspace({ connected, providerMode, reasonerMode, voiceAvailable }: {
+export function AssistantWorkspace({ connected, providerMode, reasonerMode, voiceAvailable, initialPending }: {
   connected: boolean; providerMode: ProviderMode; reasonerMode: ReasonerMode; voiceAvailable: boolean;
+  initialPending?: z.infer<typeof pendingClarificationSchema> | null;
 }) {
   const router = useRouter();
   const recording = useRef<VoiceRecording | null>(null);
@@ -45,11 +46,13 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   const objectUrls = useRef<string[]>([]);
   const latestMessage = useRef<HTMLElement | null>(null);
   const nextId = useRef(1);
+  const promptRequest = useRef<{ text: string; key: string } | null>(null);
+  const saleRequestKeys = useRef(new Map<number, string>());
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<{ file: File; preview: AttachmentPreview } | null>(null);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [pending, setPending] = useState<z.infer<typeof pendingClarificationSchema> | null>(null);
+  const [pending, setPending] = useState<z.infer<typeof pendingClarificationSchema> | null>(initialPending ?? null);
   const [inactiveDrafts, setInactiveDrafts] = useState<number[]>([]);
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceLanguage, setVoiceLanguage] = useState<"hi-IN" | "en-IN">("hi-IN");
@@ -60,6 +63,38 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   const [lastPrompt, setLastPrompt] = useState("");
   const [retryable, setRetryable] = useState(false);
   const [action, setAction] = useState<AssistantResponse | null>(null);
+
+  function pendingLabel() {
+    if (!pending) return "";
+    switch (pending.kind) {
+      case "open-account-amount": return `Opening ${pending.customer}'s khata · enter the opening amount.`;
+      case "product-create-price": return `Adding ${pending.openingStock} ${pending.unit}(s) of ${pending.product} · enter its selling price in rupees.`;
+      case "product-existing-confirm": return `Confirm adding ${pending.delta} to existing ${pending.product} stock.`;
+      case "khata-create-confirm": return `Confirm opening ${pending.customer}'s khata with ₹${pending.amountRupees}.`;
+      case "khata-currency-confirm": return `Confirm ₹${pending.amountRupees} for ${pending.customer}; khata is recorded in INR.`;
+      case "customer-name": return "Enter the customer's name.";
+      case "supplier-name": return "Enter the supplier's name.";
+      case "order-supplier": return "Choose a saved supplier for this purchase-order draft.";
+      case "order-transition-confirm": return `Confirm ${pending.action} for ${pending.orderLabel} (currently ${pending.currentStatus}).`;
+      case "order-transition-select": return "Choose one purchase order by ID or supplier name.";
+    }
+  }
+
+  function pendingPlaceholder() {
+    if (!pending) return "Ask about stock, khata or a shopping list…";
+    switch (pending.kind) {
+      case "open-account-amount": return "e.g. 100 rupaye";
+      case "product-create-price": return `Price in rupees per ${pending.unit}`;
+      case "product-existing-confirm":
+      case "khata-create-confirm":
+      case "order-transition-confirm": return "Reply yes or cancel";
+      case "khata-currency-confirm": return "Confirm INR or cancel";
+      case "customer-name": return "Customer name";
+      case "supplier-name": return "Supplier name";
+      case "order-supplier": return "Saved supplier name";
+      case "order-transition-select": return "Order ID or supplier name";
+    }
+  }
 
   useEffect(() => {
     if (messages.length > 0) latestMessage.current?.scrollIntoView({ block: "start", behavior: "instant" });
@@ -121,7 +156,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
     }
   }
 
-  async function processPrompt(text: string, speak: boolean) {
+  async function processPrompt(text: string, speak: boolean, retry = false) {
     setBusy(true);
     setWorkingOn(speak ? "voice" : "request");
     setLastPrompt(text);
@@ -132,27 +167,30 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
     setVoiceNotice("");
     player.current?.pause();
     const recent = recentTurns();
+    const key = retry && promptRequest.current?.text === text ? promptRequest.current.key : crypto.randomUUID();
+    promptRequest.current = { text, key };
     addMessage({ role: "user", text });
     try {
       setVoiceState("reasoning");
       const response = await fetch("/api/assistant/turn", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key },
         body: JSON.stringify({ text, speak, recent, pending }),
       });
       const turn = await readTurn(response);
+      promptRequest.current = null;
       setVoiceState("executing");
       await showTurn(turn);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "The request could not be verified. Check store records before retrying.";
       setVoiceState("error");
-      setRetryable(message.includes("Nothing was changed"));
+      setRetryable(/nothing was changed|no list or sale was created/i.test(message));
       addMessage({ role: "assistant", text: message, failed: true });
     } finally {
       setBusy(false);
     }
   }
 
-  async function runPrompt(rawText: string, sampleVoice = false) {
+  async function runPrompt(rawText: string, sampleVoice = false, retry = false) {
     const text = rawText.trim();
     if (!text || busy || voiceState === "listening") return;
     if (sampleVoice) {
@@ -161,7 +199,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
       setVoiceState("transcribing");
       await pause(350);
     }
-    await processPrompt(text, false);
+    await processPrompt(text, false, retry);
   }
 
   async function processAttachment() {
@@ -196,15 +234,21 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
     setBusy(true);
     setAction(null);
     setWorkingOn("request");
-    setInactiveDrafts((current) => [...current, draftMessageId]);
     addMessage({ role: "user", text: `Confirm and record this basket · ${paymentMethod.toUpperCase()}` });
     try {
+      const requestKey = saleRequestKeys.current.get(draftMessageId) ?? crypto.randomUUID();
+      saleRequestKeys.current.set(draftMessageId, requestKey);
       const items = draft.items.map((item) => ({ productId: z.uuid().parse(item.productId), quantity: item.quantity }));
       const response = await fetch("/api/assistant/confirm-sale", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": requestKey },
         body: JSON.stringify({ confirmed: true, items, paymentMethod }),
       });
-      await showTurn(await readTurn(response));
+      const turn = await readTurn(response);
+      if (turn.state === "confirmed") {
+        setInactiveDrafts((current) => current.includes(draftMessageId) ? current : [...current, draftMessageId]);
+        saleRequestKeys.current.delete(draftMessageId);
+      }
+      await showTurn(turn);
     } catch (reason) {
       setVoiceState("error");
       addMessage({ role: "assistant", text: reason instanceof Error ? reason.message : "Sale confirmation was not verified. Check Sales before trying again.", failed: true });
@@ -241,7 +285,13 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
       const response = await fetch("/api/voice/transcribe", { method: "POST", body: form });
       const raw: unknown = await response.json();
       const parsed = transcriptSchema.safeParse(raw);
-      if (!response.ok || !parsed.success) throw new Error("Transcription failed. No store action was taken; please try again.");
+      if (!response.ok) {
+        const safeError = errorSchema.safeParse(raw);
+        const retryAfter = response.headers.get("Retry-After");
+        const wait = response.status === 429 && retryAfter ? ` Wait ${retryAfter} second(s) before trying again.` : "";
+        throw new Error(`${safeError.success ? safeError.data.error : "Transcription failed. No store action was taken."}${wait}`);
+      }
+      if (!parsed.success) throw new Error("Transcription failed. No store action was taken; please try again.");
       await processPrompt(parsed.data.text, true);
     } catch (reason) {
       setVoiceState("error");
@@ -285,16 +335,16 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
             {message.result && !message.result.shoppingList && message.result.state !== "unsupported" && <div className={`conversation-result ${message.result.state}`}><span>{message.result.state === "confirmed" ? "VERIFIED STORE RESULT" : message.result.state === "draft" ? "DRAFT FOR REVIEW" : message.result.state === "clarify" ? "WAITING FOR YOU" : "STORE RESULT"}</span><strong>{message.result.title}</strong><small>{message.result.detail}</small></div>}
             {message.attachment && <div className="conversation-attachment">{message.attachment.kind === "image" ? <Image unoptimized src={message.attachment.url} alt={`Preview of ${message.attachment.name}`} width={64} height={64} /> : <FileText size={26} aria-hidden="true" />}<span>{message.attachment.name}</span></div>}
             {message.result?.shoppingList && <ShoppingListResult draft={message.result.shoppingList} busy={busy} inactive={inactiveDrafts.includes(message.id)} onConfirm={(draft, payment) => void confirmSale(draft, payment, message.id)} />}
-            {message.result?.state === "clarify" && <span className="clarification-hint">{message.result.pending ? "Waiting for an opening amount · nothing saved yet" : "Include the product and quantity · nothing saved yet"}</span>}
+            {message.result?.state === "clarify" && <span className="clarification-hint">Waiting for your reply · nothing has changed yet</span>}
           </div></article>)}
           {messages.length === 0 && <div className="assistant-starters"><span>OR START WITH A REQUEST</span><div>{examples.map((example) => <button key={example} type="button" onClick={() => void runPrompt(example)} disabled={busy}>{example}<ArrowUp size={14} aria-hidden="true" /></button>)}</div></div>}
           {busy && <div className="conversation-processing" role="status"><span className="processing-dot" /> {voiceState === "transcribing" ? "Transcribing with Prisma" : workingOn === "attachment" ? "Reading your list; nothing has been changed" : "Checking request and store"}</div>}
         </div>
         <div className="conversation-bottom">
-          {pending && <div className="pending-clarification" role="status"><ShieldCheck size={17} aria-hidden="true" /><span>Opening {pending.customer}&apos;s khata · enter the opening amount to continue.</span><button type="button" onClick={() => setPending(null)} aria-label="Cancel this khata request"><X size={16} aria-hidden="true" /></button></div>}
+          {pending && <div className="pending-clarification" role="status"><ShieldCheck size={17} aria-hidden="true" /><span>{pendingLabel()} Nothing has changed yet.</span><button type="button" onClick={() => void runPrompt("cancel")} disabled={busy} aria-label="Cancel the pending store request"><X size={16} aria-hidden="true" /></button></div>}
           {attachment && <div className="composer-attachment">{attachment.preview.kind === "image" ? <Image unoptimized src={attachment.preview.url} alt={`Preview of ${attachment.preview.name}`} width={48} height={48} /> : <FileText size={24} aria-hidden="true" />}<span><strong>{attachment.preview.name}</strong><small>Draft check only · no stock change</small></span><button type="button" onClick={() => { URL.revokeObjectURL(attachment.preview.url); setAttachment(null); }} aria-label="Remove attachment"><X size={17} aria-hidden="true" /></button></div>}
-          {retryable && lastPrompt && <button className="assistant-retry" type="button" onClick={() => void runPrompt(lastPrompt)} disabled={busy}><RotateCcw size={15} aria-hidden="true" /> Retry safe request</button>}
-          <form className="assistant-composer" onSubmit={submit}><label htmlFor="assistant-input" className="sr-only">Ask Saathi</label><input id="assistant-input" value={input} onChange={(event) => setInput(event.target.value)} placeholder={pending ? "e.g. 100 rupaye" : "Ask about stock, khata or a shopping list…"} maxLength={500} disabled={busy || voiceState === "listening"} />
+          {retryable && lastPrompt && <button className="assistant-retry" type="button" onClick={() => void runPrompt(lastPrompt, false, true)} disabled={busy}><RotateCcw size={15} aria-hidden="true" /> Retry safe request</button>}
+          <form className="assistant-composer" onSubmit={submit}><label htmlFor="assistant-input" className="sr-only">Ask Saathi</label><input id="assistant-input" value={input} onChange={(event) => setInput(event.target.value)} placeholder={pendingPlaceholder()} maxLength={500} disabled={busy || voiceState === "listening"} />
             <div className="assistant-attachment-control" ref={attachmentMenu}>
               <button ref={attachmentTrigger} type="button" className="assistant-attach" onClick={() => setAttachmentMenuOpen((value) => !value)} disabled={busy || voiceState === "listening"} aria-label="Add attachment" aria-expanded={attachmentMenuOpen} aria-controls="assistant-attachment-menu"><Paperclip size={20} aria-hidden="true" /></button>
               {attachmentMenuOpen && <div id="assistant-attachment-menu" className="assistant-attachment-menu">

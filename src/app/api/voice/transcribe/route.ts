@@ -2,12 +2,16 @@ import { createAIProvider } from "@/lib/ai/provider";
 import { isShortWav } from "@/lib/ai/wav";
 import { readProviderConfig } from "@/lib/env/config";
 import { getShopContext } from "@/server/data/context";
+import { enforceShopRateLimit } from "@/server/security/rate-limit";
+import { ProviderRequestError } from "@/lib/ai/provider-http";
 
 export async function POST(request: Request) {
   const context = await getShopContext();
   if (context.kind === "signed-out") return Response.json({ error: "Sign in to use voice." }, { status: 401 });
   if (context.kind !== "ready") return Response.json({ error: "Connect your shop before using voice." }, { status: 409 });
   if (readProviderConfig().AI_PROVIDER !== "gnani") return Response.json({ error: "Real voice is not enabled in mock mode." }, { status: 409 });
+  const voiceLimit = await enforceShopRateLimit(context, "gnani_transcribe");
+  if (voiceLimit) return voiceLimit;
   if (!request.headers.get("content-type")?.startsWith("multipart/form-data")) return Response.json({ error: "Send a WAV recording." }, { status: 415 });
 
   let form: FormData;
@@ -22,7 +26,13 @@ export async function POST(request: Request) {
   try {
     const result = await createAIProvider().transcribe({ audio, mimeType: "audio/wav", languageHint: String(language) });
     return Response.json(result);
-  } catch {
+  } catch (error) {
+    if (error instanceof ProviderRequestError) {
+      return Response.json(
+        { error: error.status === 429 ? "Prisma is busy. Please wait and try again; no store action was taken." : "Transcription is unavailable. No store action was taken." },
+        { status: error.status === 429 ? 429 : 503, headers: error.status === 429 ? { "Retry-After": error.retryAfter ?? "2" } : undefined },
+      );
+    }
     return Response.json({ error: "Transcription is unavailable. No store action was taken." }, { status: 503 });
   }
 }

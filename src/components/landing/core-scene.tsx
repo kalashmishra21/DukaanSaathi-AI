@@ -78,6 +78,23 @@ function makeAssembly() {
   innerRing.rotation.set(0.25, 1.06, 0.35);
   rig.add(outerRing, innerRing);
   resources.push(ringMaterial, outerRing.geometry, innerRing.geometry, innerRing.material);
+
+  // A radial signal path makes the object read as a voice system, not a spinning gem.
+  const waveGeometry = new THREE.CylinderGeometry(0.012, 0.012, 1, 5, 1, true);
+  const waveMaterial = new THREE.MeshStandardMaterial({
+    color: 0x91b99a,
+    metalness: 0.35,
+    roughness: 0.28,
+    emissive: 0x5b9567,
+    emissiveIntensity: 0.28,
+    transparent: true,
+    opacity: 0.86,
+  });
+  const waveCount = 56;
+  const voiceWave = new THREE.InstancedMesh(waveGeometry, waveMaterial, waveCount);
+  voiceWave.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  rig.add(voiceWave);
+  resources.push(waveGeometry, waveMaterial);
   const nodeMaterial = new THREE.MeshStandardMaterial({ color: 0xe8b476, metalness: 0.55, roughness: 0.23, emissive: 0xa56e3b, emissiveIntensity: 0.3 });
   for (const [ring, angle] of [[outerRing, 0], [outerRing, Math.PI], [innerRing, Math.PI / 2]] as const) {
     const node = new THREE.Mesh(new THREE.OctahedronGeometry(0.075, 0), nodeMaterial);
@@ -87,7 +104,7 @@ function makeAssembly() {
     resources.push(node.geometry);
   }
   resources.push(nodeMaterial);
-  return { rig, shell, plates, outerRing, innerRing, apertureEye, plateMaterials, resources };
+  return { rig, shell, plates, outerRing, innerRing, apertureEye, plateMaterials, voiceWave, waveMaterial, waveCount, resources };
 }
 
 export default function CoreScene({ mode, onReady, onContextLost }: CoreProps) {
@@ -152,7 +169,13 @@ export default function CoreScene({ mode, onReady, onContextLost }: CoreProps) {
       const rect = section.getBoundingClientRect();
       scroll.value = THREE.MathUtils.clamp((innerHeight - rect.top) / (innerHeight + rect.height), 0, 1);
     };
-    const onTheme = () => { renderer.toneMappingExposure = document.documentElement.dataset.theme === "light" ? 1.15 : 1.32; };
+    const onTheme = () => {
+      const light = document.documentElement.dataset.theme === "light";
+      renderer.toneMappingExposure = light ? 1.18 : 1.32;
+      const colors = light ? [0xdccaa6, 0x789477, 0x365b3f, 0xb5794b, 0xf0dfbc] : [0xd7a06c, 0xb5794c, 0xf1d0a0, 0x946141, 0xc58e61];
+      assembly.plateMaterials.forEach((material, index) => material.color.setHex(colors[index % colors.length]));
+      assembly.waveMaterial.color.setHex(light ? 0x527a59 : 0x91b99a);
+    };
     const themeObserver = new MutationObserver(onTheme);
     const onContextLostEvent = (event: Event) => { event.preventDefault(); onContextLost(); };
     const resize = () => {
@@ -177,6 +200,11 @@ export default function CoreScene({ mode, onReady, onContextLost }: CoreProps) {
     let elapsed = 0;
     let openness = 0;
     let visible = true;
+    const voice = new THREE.Object3D();
+    const waveDirection = new THREE.Vector3();
+    const waveUp = new THREE.Vector3(0, 1, 0);
+    const signalColor = new THREE.Color();
+    const eyeColor = new THREE.Color();
     const render = (now: number) => {
       frame = 0;
       if (document.hidden || !visible) return;
@@ -196,8 +224,24 @@ export default function CoreScene({ mode, onReady, onContextLost }: CoreProps) {
       }
       assembly.outerRing.rotation.z += delta * (state === "listening" ? 0.33 : 0.035);
       assembly.innerRing.rotation.y += delta * (state === "thinking" ? 0.32 : 0.026);
-      const warm = state === "result" ? 0x91d6a0 : state === "thinking" ? 0xffdf9f : 0xf5ca8d;
-      assembly.apertureEye.material.emissive.lerp(new THREE.Color(warm), Math.min(1, delta * 3.5));
+      const signalIntensity = state === "listening" ? 0.11 : state === "thinking" ? 0.065 : state === "action" ? 0.09 : state === "result" ? 0.052 : 0.035;
+      for (let index = 0; index < assembly.waveCount; index += 1) {
+        const angle = (index / assembly.waveCount) * Math.PI * 2;
+        const pulse = Math.abs(Math.sin(elapsed * (state === "listening" ? 8.4 : state === "thinking" ? 3.1 : 1.8) + index * 0.61));
+        const height = signalIntensity + pulse * (state === "listening" ? 0.25 : state === "action" ? 0.13 : state === "thinking" ? 0.075 : 0.045);
+        waveDirection.set(Math.cos(angle), Math.sin(angle) * 0.78, 0).normalize();
+        voice.position.set(Math.cos(angle) * 2.61, Math.sin(angle) * 2.05, -0.36);
+        voice.quaternion.setFromUnitVectors(waveUp, waveDirection);
+        voice.scale.set(1, height, 1);
+        voice.updateMatrix();
+        assembly.voiceWave.setMatrixAt(index, voice.matrix);
+      }
+      assembly.voiceWave.instanceMatrix.needsUpdate = true;
+      signalColor.setHex(state === "result" ? 0x9bd3a0 : state === "listening" ? 0xa9c990 : 0xc79a69);
+      assembly.waveMaterial.color.lerp(signalColor, Math.min(1, delta * 2.5));
+      assembly.waveMaterial.emissiveIntensity = THREE.MathUtils.damp(assembly.waveMaterial.emissiveIntensity, state === "listening" ? 0.8 : state === "thinking" ? 0.48 : state === "action" ? 0.65 : 0.28, 3.5, delta);
+      eyeColor.setHex(state === "result" ? 0x91d6a0 : state === "thinking" ? 0xffdf9f : 0xf5ca8d);
+      assembly.apertureEye.material.emissive.lerp(eyeColor, Math.min(1, delta * 3.5));
       assembly.apertureEye.material.emissiveIntensity = THREE.MathUtils.damp(assembly.apertureEye.material.emissiveIntensity, state === "listening" ? 1.5 : state === "thinking" ? 1.2 : 0.7, 4, delta);
       for (const material of assembly.plateMaterials) material.emissiveIntensity = THREE.MathUtils.damp(material.emissiveIntensity, state === "thinking" ? 0.11 : 0.025, 3, delta);
       renderer.render(scene, camera);

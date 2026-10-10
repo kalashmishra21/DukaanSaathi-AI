@@ -3,6 +3,7 @@ import { todayInIndia } from "../../business/calculations";
 import { MockAIProvider } from "../providers/mock";
 import { reasoningResultSchema, type ReasoningResult, type ToolCall } from "../types/tool-call";
 import type { ReasoningInput } from "../types/provider";
+import { ProviderRequestError, retryProviderRequest } from "../provider-http";
 
 const endpoint = "https://openrouter.ai/api/v1/chat/completions";
 const field = { type: "string" } as const;
@@ -25,6 +26,8 @@ const tools = [
   ["supplier_list", "Read the shop's supplier directory.", parameters({}, [])],
   ["supplier_create", "Add a supplier when the merchant explicitly requests it.", parameters({ name: field }, ["name"])],
   ["orders_getOpen", "Read the shop's draft and placed purchase orders.", parameters({}, [])],
+  ["orders_getStatus", "Read the actual status of one matching owner-scoped purchase order.", parameters({ order: field }, ["order"])],
+  ["orders_transition", "Request a place, receive or cancel action. The trusted app will always ask the merchant to confirm before any state change.", parameters({ order: field, action: { type: "string", enum: ["place", "receive", "cancel"] } }, ["order", "action"])],
   ["orders_createDraft", "Create an INTERNAL purchase order draft for an explicitly named supplier and product quantities. Never claim supplier was contacted.", parameters({ supplier: field, items: { type: "array", minItems: 1, maxItems: 30, items: parameters({ product: field, quantity: integer }, ["product", "quantity"]) } }, ["supplier", "items"])],
 ] as const;
 
@@ -41,6 +44,8 @@ const intentByFunction: Record<string, ToolCall["intent"]> = {
   supplier_list: "supplier.list",
   supplier_create: "supplier.create",
   orders_getOpen: "orders.getOpen",
+  orders_getStatus: "orders.getStatus",
+  orders_transition: "orders.transition",
   orders_createDraft: "orders.createDraft",
 };
 
@@ -64,13 +69,16 @@ export class OpenRouterReasoner {
     // The result still crosses the same Zod and trusted-tool boundary.
     const recognized = await new MockAIProvider(this.today).reason({ ...input, text });
     if (recognized.kind !== "unsupported") return reasoningResultSchema.parse(recognized);
-    const response = await this.request(endpoint, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const deadline = Date.now() + 40_000;
+    let response: Response;
+    try {
+      response = await retryProviderRequest(() => this.request(endpoint, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
         model: this.model,
         messages: [
-          { role: "system", content: `Classify one Indian retailer request into exactly one function call. Only propose a function; never claim it ran. Interpret Hindi, Hinglish and English. Today in India is ${this.today()}. Preserve product, customer, and supplier names. Convert Hindi numerals to integers. For today's sales use today's date. A new udhaar khata with a stated amount needs khata_openAccount; if amount is missing choose clarify_openAccount, never customer_create. A repayment needs khata_addEntry with type received. A shopping list needs inventory_checkList; do not record a sale. A reorder suggestion is a read-only inventory_getReorderSuggestions call. An order draft uses orders_createDraft only with an explicit supplier and product quantities; it does not contact the supplier. If uncertain, do not call any function.` },
+          { role: "system", content: `Classify one Indian retailer request into exactly one function call. Only propose a function; never claim it ran. Interpret Hindi, Hinglish and English. Today in India is ${this.today()}. Preserve product, customer, and supplier names. Convert Hindi number words only when unambiguous. For today's sales use today's date. A new udhaar khata with a stated amount needs khata_openAccount; if amount is missing choose clarify_openAccount, never customer_create. A repayment needs khata_addEntry with type received. Khata is INR only; if the user names dollars or another currency, do not convert or assume INR. Do not infer a missing product price, supplier, order ID or amount. A shopping list needs inventory_checkList; do not record a sale. A reorder suggestion is a read-only inventory_getReorderSuggestions call. An order draft uses orders_createDraft only with an explicitly named supplier and product quantities; it does not contact the supplier. An order state change must use orders_transition; the app will request explicit confirmation before it runs. If uncertain, do not call any function.` },
           ...(input.recent ?? []).slice(-6).map((turn) => ({ role: turn.role, content: turn.text })),
           { role: "user", content: text },
         ],
@@ -80,11 +88,14 @@ export class OpenRouterReasoner {
         temperature: 0,
         max_tokens: 400,
         stream: false,
-      }),
-      signal: AbortSignal.timeout(35_000),
-      cache: "no-store",
-    });
-    if (!response.ok) throw new Error(`OpenRouter reasoning failed (${response.status}).`);
+        }),
+        signal: AbortSignal.timeout(Math.min(35_000, Math.max(1, deadline - Date.now()))),
+        cache: "no-store",
+      }));
+    } catch {
+      throw new ProviderRequestError("OpenRouter", 503, "1");
+    }
+    if (!response.ok) throw new ProviderRequestError("OpenRouter", response.status, response.headers.get("retry-after"));
     const raw: unknown = await response.json();
     if (z.object({ error: z.unknown() }).safeParse(raw).success) {
       throw new Error("OpenRouter reasoning provider is temporarily unavailable.");
