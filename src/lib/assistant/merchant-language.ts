@@ -89,7 +89,7 @@ function titleName(value: string): string {
 }
 
 function canonicalProductName(value: string): string {
-  return value.trim() === "मैगी" ? "Maggi" : titleName(value);
+  return value.trim() === "मैगी" ? "Maggi" : titleName(value.replace(/\bcreame\b/giu, "cream"));
 }
 
 function tool(intent: string, args: unknown): ReasoningResult {
@@ -123,6 +123,19 @@ function confirmPending(pending: PendingClarification, text: string): ReasoningR
     const money = parseMoney(text);
     if (!money || money.currency === "other") return clarification(`Enter a selling price in rupees per ${pending.unit}. Nothing was created.`, pending, "product.create");
     return tool("product.create", { name: pending.product, unit: pending.unit, sellingPrice: money.amount, openingStock: pending.openingStock, threshold: 5 });
+  }
+  if (pending.kind === "product-create-unit") {
+    const unit = /^(?:packets?|pieces?|units?|bottles?|boxes?|kg|litres?|liters?)$/iu.test(normalized) ? normalized.replace(/s$/iu, "") : null;
+    if (!unit) return clarification(`What unit should I use for ${pending.product} (packet, piece, unit, bottle, box or kg)? Nothing has changed.`, pending, "product.create");
+    return clarification(`What is the selling price per ${unit} for ${pending.product}? Nothing has been created.`,
+      { kind: "product-create-price", product: pending.product, unit, openingStock: pending.openingStock }, "product.create");
+  }
+  if (pending.kind === "product-action-choice") {
+    if (/^(?:new|naya|nayi|new product|create|naya product)$/iu.test(normalized)) return clarification(
+      `What is the selling price per ${pending.unit} for ${pending.product}? Nothing has been created.`,
+      { kind: "product-create-price", product: pending.product, unit: pending.unit, openingStock: pending.quantity }, "product.create");
+    if (/^(?:existing|old|already exists|stock|existing stock)$/iu.test(normalized)) return tool("inventory.adjust", { product: pending.product, delta: pending.quantity });
+    return clarification(`Is ${pending.product} a new product or existing stock? Reply new or existing. Nothing changed.`, pending, "inventory.adjust");
   }
   if (pending.kind === "product-existing-confirm") {
     if (!isYes(text)) return clarification(`Should I add ${pending.delta} to existing ${pending.product} stock? Reply yes or cancel. No stock has changed.`, pending, "inventory.adjust");
@@ -259,6 +272,8 @@ export function pendingQuestion(pending: PendingClarification): string {
   switch (pending.kind) {
     case "open-account-amount": return `How much opening udhaar should I enter for ${pending.customer}?`;
     case "product-create-price": return `What is the selling price per ${pending.unit} for ${pending.product}?`;
+    case "product-create-unit": return `What unit should I use for ${pending.product}?`;
+    case "product-action-choice": return `Is ${pending.product} new or existing stock?`;
     case "product-existing-confirm": return `Should I add ${pending.delta} to existing ${pending.product} stock?`;
     case "khata-create-confirm": return `Should I open ${pending.customer}'s khata with ₹${pending.amountRupees}? Reply yes or cancel.`;
     case "khata-currency-confirm": return `Please confirm whether this is ₹${pending.amountRupees} for ${pending.customer}. Khata uses INR.`;
@@ -338,7 +353,8 @@ export function reasonMerchantCommand(rawText: string, today: string): Reasoning
     const amountUnit = parseQuantityUnit(explicitOrder[3]);
     if (amountUnit) return tool("orders.createDraft", { supplier: titleName(explicitOrder[1]), items: [{ product: titleName(explicitOrder[2]), quantity: amountUnit.quantity }] });
   }
-  const missingSupplier = /^(.+?)\s+ka\s+order\s+(.+?)\s+(?:de\s+do|bana\s+do|banao|kar\s+do)$/iu.exec(text);
+  const missingSupplier = /^(.+?)\s+ka\s+order\s+(.+?)\s+(?:de\s+do|bana\s+do|banao|kar\s+do)$/iu.exec(text)
+    ?? /^(.+?)\s+ka\s+(.+?)\s+ka\s+order\s+(?:de\s+do|bana\s+do|banao|kar\s+do)$/iu.exec(text);
   if (missingSupplier) {
     const amountUnit = parseQuantityUnit(missingSupplier[2]);
     if (amountUnit) return clarification(`Which saved supplier should I use for ${amountUnit.quantity} ${amountUnit.unit}(s) of ${titleName(missingSupplier[1])}? I will create a draft only; no supplier will be contacted.`, {
@@ -365,16 +381,23 @@ export function reasonMerchantCommand(rawText: string, today: string): Reasoning
   if (/^(?:what(?:'s| is| are) today's sales|tell me today's (?:total )?sales|today's sales summary|aaj ki (?:total )?sale batao|aaj ki sales batao|aaj ki bikri batao)$/iu.test(text))
     return tool("sales.getDailySummary", { date: today });
 
+  const bareProduct = /^(.+)\s+(\d+|[a-z]+(?:\s+sau)?)\s+(packets?|pieces?|units?|bottles?|boxes?)$/iu.exec(text);
+  if (bareProduct && !/^(?:increase|decrease|reduce)\b/iu.test(text)) {
+    const quantity = parseMerchantNumber(bareProduct[2]);
+    if (quantity !== null) return clarification(`Is ${canonicalProductName(bareProduct[1])} a new product or should I add ${quantity} to existing stock? No stock has changed.`,
+      { kind: "product-action-choice", product: canonicalProductName(bareProduct[1]), quantity, unit: bareProduct[3].replace(/s$/iu, "") }, "inventory.adjust");
+  }
+
   const englishAdd = /^add\s+(.+?)\s+(?:packets?|packet|units?|unit)\s+of\s+(.+?)\s+to\s+(?:inventory|stock)$/iu.exec(text);
   if (englishAdd) {
     const quantity = parseMerchantNumber(englishAdd[1]);
     if (quantity) return tool("inventory.adjust", { product: canonicalProductName(englishAdd[2]), delta: quantity });
   }
-  const addInventory = /^(.+?)\s+ke\s+(.+?)\s+(?:packets?|packet|pieces?|piece|units?|unit)\s+(?:add|jodo|daal)\s*(?:karo|kro|kar\s+do)?$/iu.exec(text)
-    ?? /^(.+?)\s+(?:ke\s+)?(.+?)\s+(?:packets?|packet|pieces?|piece|units?|unit)\s+(?:add|jodo|daal)\s*(?:karo|kro|kar\s+do)?$/iu.exec(text);
+  const addInventory = /^(.+?)\s+(?:ke|ka)\s+(.+?)\s+(packets?|packet|pieces?|piece|units?|unit)\s+(?:add|jodo|daal)\s*(?:karo|kro|kar\s+do|kr\s+do)?(?:\s+inventory\s+me)?$/iu.exec(text)
+    ?? /^(.+?)\s+(?:(?:ke|ka)\s+)?(.+?)\s+(packets?|packet|pieces?|piece|units?|unit)\s+(?:add|jodo|daal)\s*(?:karo|kro|kar\s+do|kr\s+do)?(?:\s+inventory\s+me)?$/iu.exec(text);
   if (addInventory) {
     const quantity = parseMerchantNumber(addInventory[2]);
-    if (quantity) return tool("inventory.adjust", { product: canonicalProductName(addInventory[1]), delta: quantity });
+    if (quantity) return tool("inventory.adjust", { product: canonicalProductName(addInventory[1]), delta: quantity, unit: addInventory[3].replace(/s$/iu, "") });
   }
   const stock = /^(?:what(?:'s| is) the stock of|show (?:me )?the stock of)\s+(.+?)$/iu.exec(text)
     ?? /^(.+?)\s+ka stock batao$/iu.exec(text);
@@ -393,4 +416,24 @@ export function completePending(rawPending: unknown, text: string): ReasoningRes
   const parsed = pendingClarificationSchema.safeParse(rawPending);
   if (!parsed.success) return null;
   return confirmPending(parsed.data, text);
+}
+
+// A pending answer only owns the next turn when it looks like an answer to that
+// particular question. A fresh merchant command must be allowed to interrupt it.
+export function shouldContinuePending(rawPending: unknown, rawText: string): boolean {
+  const parsed = pendingClarificationSchema.safeParse(rawPending);
+  if (!parsed.success) return false;
+  const text = normalizeMerchantText(rawText).toLocaleLowerCase("en-IN");
+  if (isClarificationCancel(rawText)) return true;
+  if (parsed.data.kind === "khata-currency-confirm" && /^(?:haan|ha|yes|confirm)?\s*,?\s*(?:inr|rs|rupees?|rupaye)$/iu.test(text)) return true;
+  if (parsed.data.kind === "open-account-amount" && !/\b(?:aaj|today|sales?|stock|inventory|udhaar|khata|order|supplier|customer|add|create|show|batao)\b/u.test(text)) return true;
+  if (/(?:\baaj\b|\btoday\b|\bsales?\b|\bstock\b|\binventory\b|\budhaar\b|\bkhata\b|\border\b|\bsupplier\b|\bcustomer\b|\badd\b|\bcreate\b|\bshow\b|\bbatao\b)/u.test(text)) {
+    return parsed.data.kind === "order-transition-confirm" && isYes(rawText);
+  }
+  if (["product-create-price", "open-account-amount", "khata-currency-confirm"].includes(parsed.data.kind)) {
+    return parseMoney(rawText) !== null || isYes(rawText);
+  }
+  if (["product-existing-confirm", "khata-create-confirm", "order-transition-confirm"].includes(parsed.data.kind)) return isYes(rawText);
+  if (parsed.data.kind === "product-action-choice") return /^(?:new|naya|nayi|new product|create|naya product|existing|old|already exists|stock|existing stock)$/iu.test(text);
+  return text.length > 0 && text.split(/\s+/u).length <= 5;
 }

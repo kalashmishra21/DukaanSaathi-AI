@@ -12,7 +12,7 @@ function makeAssembly() {
   shell.rotation.set(0.18, -0.22, 0.11);
   rig.add(shell);
   const resources: Array<{ dispose: () => void }> = [];
-  const darkCore = new THREE.Mesh(new THREE.SphereGeometry(1.34, 32, 24), new THREE.MeshPhysicalMaterial({ color: 0x183126, metalness: 0.42, roughness: 0.27, clearcoat: 0.75, clearcoatRoughness: 0.18 }));
+  const darkCore = new THREE.Mesh(new THREE.SphereGeometry(1.34, 32, 24), new THREE.MeshPhysicalMaterial({ color: 0x171c36, metalness: 0.42, roughness: 0.27, clearcoat: 0.75, clearcoatRoughness: 0.18 }));
   darkCore.castShadow = true;
   shell.add(darkCore);
   resources.push(darkCore.geometry, darkCore.material);
@@ -27,8 +27,8 @@ function makeAssembly() {
   }
   source.dispose();
   const apertureIndex = triangles.reduce((best, triangle, index) => triangle.center.z > triangles[best].center.z ? index : best, 0);
-  const plateColors = [0xd7a06c, 0xb5794c, 0xf1d0a0, 0x946141, 0xc58e61];
-  const plateMaterials = plateColors.map((color) => new THREE.MeshPhysicalMaterial({ color, metalness: 0.34, roughness: 0.33, clearcoat: 0.72, clearcoatRoughness: 0.24, emissive: 0x633c22, emissiveIntensity: 0.025, side: THREE.DoubleSide }));
+  const plateColors = [0x9aaaff, 0x5e6dc6, 0xdce3ff, 0x46538d, 0x7e8fe0];
+  const plateMaterials = plateColors.map((color) => new THREE.MeshPhysicalMaterial({ color, metalness: 0.34, roughness: 0.33, clearcoat: 0.72, clearcoatRoughness: 0.24, emissive: 0x242d6b, emissiveIntensity: 0.04, side: THREE.DoubleSide }));
   resources.push(...plateMaterials);
   const plates: Array<{ plate: THREE.Mesh; normal: THREE.Vector3; phase: number }> = [];
 
@@ -53,7 +53,7 @@ function makeAssembly() {
     plates.push({ plate, normal: triangle.normal, phase: index * 0.67 });
     resources.push(geometry);
     const outlineGeometry = new THREE.EdgesGeometry(geometry, 20);
-    const outlineMaterial = new THREE.LineBasicMaterial({ color: 0xf9ddb3, transparent: true, opacity: 0.36 });
+    const outlineMaterial = new THREE.LineBasicMaterial({ color: 0xe4eaff, transparent: true, opacity: 0.45 });
     plate.add(new THREE.LineSegments(outlineGeometry, outlineMaterial));
     resources.push(outlineGeometry, outlineMaterial);
   });
@@ -62,16 +62,16 @@ function makeAssembly() {
   const aperture = new THREE.Group();
   aperture.position.copy(apertureNormal).multiplyScalar(1.5);
   aperture.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), apertureNormal);
-  const apertureBase = new THREE.Mesh(new THREE.CircleGeometry(0.33, 40), new THREE.MeshPhysicalMaterial({ color: 0x102b20, metalness: 0.25, roughness: 0.23, clearcoat: 1 }));
-  const apertureRing = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.034, 8, 64), new THREE.MeshStandardMaterial({ color: 0xe7bb81, metalness: 0.62, roughness: 0.24, emissive: 0x8b532c, emissiveIntensity: 0.15 }));
+  const apertureBase = new THREE.Mesh(new THREE.CircleGeometry(0.33, 40), new THREE.MeshPhysicalMaterial({ color: 0x141a34, metalness: 0.25, roughness: 0.23, clearcoat: 1 }));
+  const apertureRing = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.034, 8, 64), new THREE.MeshStandardMaterial({ color: 0xb9c4ff, metalness: 0.62, roughness: 0.24, emissive: 0x4658c6, emissiveIntensity: 0.22 }));
   apertureRing.position.z = 0.015;
-  const apertureEye = new THREE.Mesh(new THREE.SphereGeometry(0.12, 20, 12), new THREE.MeshStandardMaterial({ color: 0xf5d09a, metalness: 0.18, roughness: 0.2, emissive: 0xd39052, emissiveIntensity: 0.7 }));
+  const apertureEye = new THREE.Mesh(new THREE.SphereGeometry(0.12, 20, 12), new THREE.MeshStandardMaterial({ color: 0xe5eaff, metalness: 0.18, roughness: 0.2, emissive: 0x8fa1ff, emissiveIntensity: 0.7 }));
   apertureEye.position.z = 0.045;
   aperture.add(apertureBase, apertureRing, apertureEye);
   shell.add(aperture);
   resources.push(apertureBase.geometry, apertureBase.material, apertureRing.geometry, apertureRing.material, apertureEye.geometry, apertureEye.material);
 
-  const ringMaterial = new THREE.MeshStandardMaterial({ color: 0xc59b6c, metalness: 0.68, roughness: 0.3, transparent: true, opacity: 0.62 });
+  const ringMaterial = new THREE.MeshStandardMaterial({ color: 0xa7b5ff, metalness: 0.68, roughness: 0.3, transparent: true, opacity: 0.62 });
   const outerRing = new THREE.Mesh(new THREE.TorusGeometry(2.28, 0.018, 6, 96), ringMaterial);
   outerRing.rotation.set(1.02, 0.18, -0.4);
   const innerRing = new THREE.Mesh(new THREE.TorusGeometry(2.01, 0.013, 6, 96), ringMaterial.clone());
@@ -82,10 +82,10 @@ function makeAssembly() {
   // A radial signal path makes the object read as a voice system, not a spinning gem.
   const waveGeometry = new THREE.CylinderGeometry(0.012, 0.012, 1, 5, 1, true);
   const waveMaterial = new THREE.MeshStandardMaterial({
-    color: 0x91b99a,
+    color: 0x9bb0ff,
     metalness: 0.35,
     roughness: 0.28,
-    emissive: 0x5b9567,
+    emissive: 0x6279df,
     emissiveIntensity: 0.28,
     transparent: true,
     opacity: 0.86,
@@ -95,7 +95,7 @@ function makeAssembly() {
   voiceWave.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   rig.add(voiceWave);
   resources.push(waveGeometry, waveMaterial);
-  const nodeMaterial = new THREE.MeshStandardMaterial({ color: 0xe8b476, metalness: 0.55, roughness: 0.23, emissive: 0xa56e3b, emissiveIntensity: 0.3 });
+  const nodeMaterial = new THREE.MeshStandardMaterial({ color: 0xc4d0ff, metalness: 0.55, roughness: 0.23, emissive: 0x6479dc, emissiveIntensity: 0.3 });
   for (const [ring, angle] of [[outerRing, 0], [outerRing, Math.PI], [innerRing, Math.PI / 2]] as const) {
     const node = new THREE.Mesh(new THREE.OctahedronGeometry(0.075, 0), nodeMaterial);
     const radius = ring === outerRing ? 2.28 : 2.01;
@@ -137,20 +137,20 @@ export default function CoreScene({ mode, onReady, onContextLost }: CoreProps) {
     renderer.domElement.setAttribute("aria-hidden", "true");
     mount.append(renderer.domElement);
 
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.ShadowMaterial({ color: 0x030f08, opacity: 0.085 }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.ShadowMaterial({ color: 0x06091b, opacity: 0.085 }));
     floor.position.set(0.25, -0.12, -2.15);
     floor.receiveShadow = true;
     scene.add(floor);
-    const ambient = new THREE.AmbientLight(0xf4e8ce, 1.55);
-    const key = new THREE.DirectionalLight(0xffd3a1, 4.8);
+    const ambient = new THREE.AmbientLight(0xdfdff8, 1.55);
+    const key = new THREE.DirectionalLight(0xd8e1ff, 4.8);
     key.position.set(-3.5, 5, 6);
     key.castShadow = true;
     key.shadow.mapSize.set(512, 512);
     key.shadow.radius = 3;
     key.shadow.camera.left = -4; key.shadow.camera.right = 4; key.shadow.camera.top = 4; key.shadow.camera.bottom = -4;
-    const rim = new THREE.DirectionalLight(0x8fb99e, 4);
+    const rim = new THREE.DirectionalLight(0x8198ff, 4);
     rim.position.set(3.5, 1, -3.4);
-    const specular = new THREE.PointLight(0xffe4ba, 10, 12, 2);
+    const specular = new THREE.PointLight(0xd9e1ff, 10, 12, 2);
     specular.position.set(3, -1.6, 4.1);
     scene.add(ambient, key, rim, specular);
 
@@ -172,9 +172,9 @@ export default function CoreScene({ mode, onReady, onContextLost }: CoreProps) {
     const onTheme = () => {
       const light = document.documentElement.dataset.theme === "light";
       renderer.toneMappingExposure = light ? 1.18 : 1.32;
-      const colors = light ? [0xdccaa6, 0x789477, 0x365b3f, 0xb5794b, 0xf0dfbc] : [0xd7a06c, 0xb5794c, 0xf1d0a0, 0x946141, 0xc58e61];
+      const colors = light ? [0xb1bdf1, 0x8191d8, 0x4f5d9c, 0x7789ce, 0xd9e0ff] : [0x9aaaff, 0x5e6dc6, 0xdce3ff, 0x46538d, 0x7e8fe0];
       assembly.plateMaterials.forEach((material, index) => material.color.setHex(colors[index % colors.length]));
-      assembly.waveMaterial.color.setHex(light ? 0x527a59 : 0x91b99a);
+      assembly.waveMaterial.color.setHex(light ? 0x5f72ce : 0x9bb0ff);
     };
     const themeObserver = new MutationObserver(onTheme);
     const onContextLostEvent = (event: Event) => { event.preventDefault(); onContextLost(); };

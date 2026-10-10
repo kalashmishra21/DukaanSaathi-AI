@@ -18,7 +18,7 @@ const states: Record<CoreMode, { title: string; detail: string; visual: string }
 function CoreFallback({ description }: { description: string }) {
   return <div className="core-object" role="img" aria-label={description}>
     <svg viewBox="0 0 480 480" aria-hidden="true" focusable="false">
-      <defs><linearGradient id="landing-core-face" x1=".1" y1="0" x2=".9" y2="1"><stop offset="0" stopColor="#f7d9ac" /><stop offset=".45" stopColor="#b87749" /><stop offset="1" stopColor="#5e4432" /></linearGradient></defs>
+      <defs><linearGradient id="landing-core-face" x1=".1" y1="0" x2=".9" y2="1"><stop offset="0" stopColor="#e6eaff" /><stop offset=".45" stopColor="#8798ed" /><stop offset="1" stopColor="#344381" /></linearGradient></defs>
       <path className="core-shadow" d="M240 52 363 103 424 226 382 349 263 427 130 395 54 286 75 157 169 68Z" />
       <path className="facet facet-back" d="M240 52 363 103 424 226 382 349 263 427 130 395 54 286 75 157 169 68Z" />
       <path className="facet facet-a" d="M240 52 363 103 296 170 240 210 169 68Z" />

@@ -13,7 +13,7 @@ const parameters = (properties: Record<string, unknown>, required: string[]) =>
 const listItems = { type: "array", minItems: 1, maxItems: 30, items: parameters({ product: field, quantity: integer }, ["product", "quantity"]) };
 
 const tools = [
-  ["inventory_adjust", "Propose a stock change. Positive delta adds stock; negative delta removes it.", parameters({ product: field, delta: integer }, ["product", "delta"])],
+  ["inventory_adjust", "Propose a stock change. Positive delta adds stock; negative delta removes it. Include unit only when explicitly stated; the trusted tool asks for unit and price if this product is missing.", parameters({ product: field, delta: integer, unit: field }, ["product", "delta"])],
   ["inventory_getStock", "Read the current stock of a product.", parameters({ product: field }, ["product"])],
   ["khata_getBalance", "Read how much a customer owes the shop.", parameters({ customer: field }, ["customer"])],
   ["khata_addEntry", "Record a customer's ledger event. Use type received when the customer pays or returns money; gave when the shop gives new credit.", parameters({ customer: field, type: { type: "string", enum: ["gave", "received"] }, amountRupees: integer }, ["customer", "type", "amountRupees"])],

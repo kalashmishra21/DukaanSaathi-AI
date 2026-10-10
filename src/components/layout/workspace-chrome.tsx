@@ -1,16 +1,52 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AudioLines, Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
+import { AudioLines, Menu, MessageCircle, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { BrandLockup, BrandMark } from "./brand";
 import { WorkspaceNav } from "./workspace-nav";
 import { ProfileControl } from "./profile-control";
 
-export function WorkspaceChrome({ children, shopName, status, description, demo }: {
+const AssistantWorkspace = dynamic(() => import("@/components/assistant/assistant-workspace").then((module) => module.AssistantWorkspace),
+  { loading: () => <div className="saathi-drawer-loading" role="status">Opening Saathi…</div> });
+
+export function WorkspaceChrome({ children, shopName, status, description, demo, connected, providerMode, reasonerMode, voiceAvailable }: {
   children: ReactNode; shopName: string; status: string; description: string; demo: boolean;
+  connected: boolean; providerMode: "mock" | "gnani"; reasonerMode: "mock" | "openrouter"; voiceAvailable: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const pathname = usePathname();
+  const expanded = pathname === "/app/assistant";
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [assistantLoaded, setAssistantLoaded] = useState(expanded);
+  const assistantVisible = expanded || drawerOpen;
   const mobile = useRef<HTMLDialogElement>(null);
+  const drawer = useRef<HTMLDivElement>(null);
+  const floatingTrigger = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const frame = requestAnimationFrame(() => { setAssistantLoaded(true); setDrawerOpen(false); });
+    return () => cancelAnimationFrame(frame);
+  }, [expanded]);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const returnFocus = floatingTrigger.current;
+    const focusFrame = requestAnimationFrame(() => drawer.current?.querySelector<HTMLElement>("button:not([disabled])")?.focus());
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setDrawerOpen(false); return; }
+      if (event.key !== "Tab" || !drawer.current) return;
+      const candidates = [...drawer.current.querySelectorAll<HTMLElement>("button:not([disabled]),a[href],input:not([disabled]),select:not([disabled])")]
+        .filter((element) => element.offsetParent !== null);
+      if (!candidates.length) return;
+      const first = candidates[0]; const last = candidates[candidates.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    window.addEventListener("keydown", close);
+    return () => { cancelAnimationFrame(focusFrame); window.removeEventListener("keydown", close); returnFocus?.focus(); };
+  }, [drawerOpen]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -42,8 +78,16 @@ export function WorkspaceChrome({ children, shopName, status, description, demo 
         <div className="workspace-topbar-location"><button type="button" className="mobile-menu-button" aria-label="Open navigation" onClick={() => mobile.current?.showModal()}><Menu size={21} /></button><span className="workspace-mobile-symbol"><BrandMark size={26} /></span><span className="workspace-topbar-mark" /><span className="workspace-topbar-shop">{shopName}</span><span className="workspace-topbar-separator">/</span><span className="workspace-topbar-secondary">{demo ? "DEMO STORE" : "STORE WORKSPACE"}</span></div>
         <ProfileControl />
       </header>
-      <main className="workspace-main">{children}</main>
+      <main className="workspace-main" hidden={expanded}>{children}</main>
+      {(assistantLoaded || expanded) && <div ref={drawer} className={expanded ? "shared-assistant-full" : "shared-assistant-drawer"} hidden={!assistantVisible}
+        role={expanded ? undefined : "dialog"} aria-modal={expanded ? undefined : true} aria-label="Saathi assistant">
+        <AssistantWorkspace connected={connected} providerMode={providerMode} reasonerMode={reasonerMode} voiceAvailable={voiceAvailable}
+          expanded={expanded} onClose={() => setDrawerOpen(false)} />
+      </div>}
     </div>
+    {!expanded && !drawerOpen && <button ref={floatingTrigger} type="button" className="saathi-float-trigger" onClick={() => { setAssistantLoaded(true); setDrawerOpen(true); }}
+      aria-label="Open Saathi assistant"><MessageCircle size={22} aria-hidden="true" /><span>Ask Saathi</span></button>}
+    {drawerOpen && !expanded && <button type="button" className="saathi-drawer-scrim" aria-label="Close Saathi assistant" onClick={() => setDrawerOpen(false)} />}
     <dialog ref={mobile} className="mobile-nav-dialog" aria-label="Workspace navigation" onClick={(event) => { if (event.target === mobile.current) mobile.current.close(); }}>
       <div className="mobile-nav-content">{sidebar(true)}</div>
     </dialog>

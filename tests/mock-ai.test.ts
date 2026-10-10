@@ -11,7 +11,7 @@ describe("MockAIProvider", () => {
   it("returns deterministic structured inventory intent", async () => {
     await expect(provider.reason({ text: "Maggi ke 20 packet add kar do" })).resolves.toEqual({
       kind: "tool_call",
-      tool: { intent: "inventory.adjust", arguments: { product: "Maggi", delta: 20 } },
+      tool: { intent: "inventory.adjust", arguments: { product: "Maggi", delta: 20, unit: "packet" } },
     });
   });
 
@@ -79,7 +79,7 @@ describe("MockAIProvider", () => {
 
   it("handles supported Hindi transcripts after Prisma transcription", async () => {
     await expect(provider.reason({ text: "मैगी के २० पैकेट जोड़ कर दो।" })).resolves.toEqual({
-      kind: "tool_call", tool: { intent: "inventory.adjust", arguments: { product: "Maggi", delta: 20 } },
+      kind: "tool_call", tool: { intent: "inventory.adjust", arguments: { product: "Maggi", delta: 20, unit: "packet" } },
     });
     await expect(provider.reason({ text: "शर्मा जी का कितना उधार है?" })).resolves.toMatchObject({
       kind: "tool_call", tool: { intent: "khata.getBalance" },

@@ -1,7 +1,7 @@
 import { reasoningResultSchema, type ReasoningResult } from "../types/tool-call";
 import type { AIProvider, ReasoningInput, SpeechResult, TranscriptionInput, TranscriptionResult } from "../types/provider";
 import { todayInIndia } from "../../business/calculations";
-import { completePending, reasonMerchantCommand } from "../../assistant/merchant-language";
+import { completePending, reasonMerchantCommand, shouldContinuePending } from "../../assistant/merchant-language";
 
 export class MockAIProvider implements AIProvider {
   constructor(private readonly today: () => string = todayInIndia) {}
@@ -12,7 +12,7 @@ export class MockAIProvider implements AIProvider {
   }
 
   async reason(input: ReasoningInput): Promise<ReasoningResult> {
-    const pending = completePending(input.pending, input.text);
+    const pending = shouldContinuePending(input.pending, input.text) ? completePending(input.pending, input.text) : null;
     if (pending) return reasoningResultSchema.parse(pending);
     return reasoningResultSchema.parse(reasonMerchantCommand(input.text, this.today()));
   }

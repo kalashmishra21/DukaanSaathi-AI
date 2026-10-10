@@ -11,7 +11,7 @@ export const toolCallSchema = z.discriminatedUnion("intent", [
   }).strict() }).strict(),
   z.object({
     intent: z.literal("inventory.adjust"),
-    arguments: z.object({ product: name, delta: z.number().int().min(-100000).max(100000).refine((value) => value !== 0) }).strict(),
+    arguments: z.object({ product: name, delta: z.number().int().min(-100000).max(100000).refine((value) => value !== 0), unit: name.optional() }).strict(),
   }).strict(),
   z.object({
     intent: z.literal("inventory.getStock"),
@@ -54,6 +54,8 @@ export const toolCallSchema = z.discriminatedUnion("intent", [
 export const pendingClarificationSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("open-account-amount"), customer: name }).strict(),
   z.object({ kind: z.literal("product-create-price"), product: name, unit: name, openingStock: z.number().int().min(0).max(100000) }).strict(),
+  z.object({ kind: z.literal("product-create-unit"), product: name, openingStock: z.number().int().positive().max(100000) }).strict(),
+  z.object({ kind: z.literal("product-action-choice"), product: name, unit: name, quantity: z.number().int().positive().max(100000) }).strict(),
   z.object({ kind: z.literal("product-existing-confirm"), product: name, delta: z.number().int().positive().max(100000) }).strict(),
   z.object({ kind: z.literal("khata-create-confirm"), customer: name, amountRupees: z.number().int().positive() }).strict(),
   z.object({ kind: z.literal("khata-currency-confirm"), customer: name, amountRupees: z.number().int().positive(), type: z.enum(["gave", "received"]) }).strict(),

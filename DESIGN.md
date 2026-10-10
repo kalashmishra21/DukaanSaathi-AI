@@ -1,5 +1,11 @@
 # DukaanSaathi AI visual direction
 
+## Stage 14 brand direction
+
+The current interface uses **Ink / Ivory / Electric Blue**. Dark mode pairs ink `#0C0D12` with layered slate `#20232C`, warm ivory `#F7F6F2`, and selective electric blue `#657BFF`/`#B9C4FF`. Light mode uses warm ivory reading surfaces, dark ink typography, and deeper blue controls for contrast. Semantic design tokens in the workspace and landing govern both modes; light is art directed for clarity rather than produced by inverting dark colors. Green remains a semantic success cue. The earlier forest and copper descriptions below document prior phases and should not drive new Stage 14 UI work.
+
+The Assistant is one shared authenticated workspace system. Its floating entry opens the same conversation and history used by the expanded route. Results align with the conversation; confirmed actions must be visually distinct from drafts, clarification, and failure. Motion is brief and purposeful, and the drawer and 3D landing respect reduced motion.
+
 ## Brand
 
 **Modern Indian commerce intelligence.** DukaanSaathi AI should feel premium, trustworthy, Indian-commerce aware, modern, conversational, and intelligent. The tone is calm and capable. It should not feel childish, stereotypically “kirana,” or like another purple-gradient AI SaaS site.

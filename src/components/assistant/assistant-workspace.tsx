@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUp, AudioLines, Camera, FileText, ImagePlus, Info, Mic, Paperclip, RotateCcw, ShieldCheck, Square, X } from "lucide-react";
+import { ArrowUp, AudioLines, Camera, FileText, ImagePlus, Info, Mic, Paperclip, RotateCcw, ShieldCheck, Square, X, Plus, History, Pencil, Trash2 } from "lucide-react";
 import { z } from "zod";
 import { assistantResponseSchema, type AssistantResponse } from "@/lib/business/assistant-response";
 import { pendingClarificationSchema, type recentTurnSchema } from "@/lib/ai/types/tool-call";
@@ -15,10 +15,16 @@ import { VoiceStateIndicator } from "./voice-state-indicator";
 import { ShoppingListResult } from "./shopping-list-result";
 
 type AttachmentPreview = { name: string; kind: "image" | "pdf"; url: string };
-type Message = { id: number; role: "user" | "assistant"; text: string; attachment?: AttachmentPreview; result?: AssistantResponse; failed?: boolean };
+type Message = { id: number; persistedId?: string; role: "user" | "assistant"; text: string; attachment?: AttachmentPreview; result?: AssistantResponse; failed?: boolean };
 type ProviderMode = "mock" | "gnani";
 type ReasonerMode = "mock" | "openrouter";
 type RecentTurn = z.infer<typeof recentTurnSchema>;
+type ConversationSummary = { id: string; title: string; updated_at: string };
+const threadListSchema = z.object({ conversations: z.array(z.object({ id: z.uuid(), title: z.string(), updated_at: z.string() })) });
+const threadSchema = z.object({ id: z.uuid(), title: z.string(), pending: pendingClarificationSchema.nullable(), messages: z.array(z.object({
+  id: z.uuid(), role: z.enum(["user", "assistant"]), text: z.string(), result: assistantResponseSchema.nullable(),
+  request_key: z.uuid(), created_at: z.string(),
+})) });
 
 const examples = [
   "Maggi ke 20 packet add kar do",
@@ -30,9 +36,9 @@ const transcriptSchema = z.object({ text: z.string().trim().min(1), language: z.
 const errorSchema = z.object({ error: z.string().min(1).max(250) });
 const pause = (duration: number) => new Promise((resolve) => setTimeout(resolve, duration));
 
-export function AssistantWorkspace({ connected, providerMode, reasonerMode, voiceAvailable, initialPending }: {
+export function AssistantWorkspace({ connected, providerMode, reasonerMode, voiceAvailable, expanded = true, onClose }: {
   connected: boolean; providerMode: ProviderMode; reasonerMode: ReasonerMode; voiceAvailable: boolean;
-  initialPending?: z.infer<typeof pendingClarificationSchema> | null;
+  expanded?: boolean; onClose?: () => void;
 }) {
   const router = useRouter();
   const recording = useRef<VoiceRecording | null>(null);
@@ -47,12 +53,19 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   const latestMessage = useRef<HTMLElement | null>(null);
   const nextId = useRef(1);
   const promptRequest = useRef<{ text: string; key: string } | null>(null);
-  const saleRequestKeys = useRef(new Map<number, string>());
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<{ file: File; preview: AttachmentPreview } | null>(null);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [pending, setPending] = useState<z.infer<typeof pendingClarificationSchema> | null>(initialPending ?? null);
+  const [pending, setPending] = useState<z.infer<typeof pendingClarificationSchema> | null>(null);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(connected);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const activeThread = useRef<string | null>(null);
   const [inactiveDrafts, setInactiveDrafts] = useState<number[]>([]);
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceLanguage, setVoiceLanguage] = useState<"hi-IN" | "en-IN">("hi-IN");
@@ -69,6 +82,8 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
     switch (pending.kind) {
       case "open-account-amount": return `Opening ${pending.customer}'s khata · enter the opening amount.`;
       case "product-create-price": return `Adding ${pending.openingStock} ${pending.unit}(s) of ${pending.product} · enter its selling price in rupees.`;
+      case "product-create-unit": return `Adding ${pending.openingStock} of ${pending.product} · enter its unit.`;
+      case "product-action-choice": return `Is ${pending.product} a new product or existing stock?`;
       case "product-existing-confirm": return `Confirm adding ${pending.delta} to existing ${pending.product} stock.`;
       case "khata-create-confirm": return `Confirm opening ${pending.customer}'s khata with ₹${pending.amountRupees}.`;
       case "khata-currency-confirm": return `Confirm ₹${pending.amountRupees} for ${pending.customer}; khata is recorded in INR.`;
@@ -85,6 +100,8 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
     switch (pending.kind) {
       case "open-account-amount": return "e.g. 100 rupaye";
       case "product-create-price": return `Price in rupees per ${pending.unit}`;
+      case "product-create-unit": return "Unit, e.g. packet";
+      case "product-action-choice": return "Reply new or existing";
       case "product-existing-confirm":
       case "khata-create-confirm":
       case "order-transition-confirm": return "Reply yes or cancel";
@@ -118,6 +135,107 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
     objectUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
+  async function loadThread(id: string) {
+    const response = await fetch(`/api/assistant/conversations?id=${encodeURIComponent(id)}`, { cache: "no-store" });
+    if (!response.ok) throw new Error("This conversation could not be loaded.");
+    const thread = threadSchema.parse(await response.json());
+    activeThread.current = thread.id;
+    setConversationId(thread.id);
+    setMessages(thread.messages.map((message, index) => ({ id: index + 1, persistedId: message.id, role: message.role, text: message.text,
+      result: message.result ?? undefined, failed: message.result?.state === "failed" })));
+    nextId.current = thread.messages.length + 1;
+    setPending(thread.pending);
+    const lastResult = [...thread.messages].reverse().find((message) => message.result)?.result ?? null;
+    setAction(lastResult);
+    const usedDrafts = new Set(thread.messages.flatMap((message) => message.result?.sourceDraftId ? [message.result.sourceDraftId] : []));
+    setInactiveDrafts(thread.messages.flatMap((message, index) => message.result?.state === "draft" && usedDrafts.has(message.id) ? [index + 1] : []));
+    setRetryable(false);
+    try { localStorage.setItem("dukaansaathi-assistant-thread", id); } catch { /* Session still works. */ }
+  }
+
+  async function refreshConversations(preferred?: string) {
+    const response = await fetch("/api/assistant/conversations", { cache: "no-store" });
+    if (!response.ok) throw new Error("Conversation history is unavailable. Store actions are paused.");
+    const list = threadListSchema.parse(await response.json()).conversations;
+    setConversations(list);
+    let id = preferred && list.some((item) => item.id === preferred) ? preferred : null;
+    if (!id) {
+      let saved: string | null = null;
+      try { saved = localStorage.getItem("dukaansaathi-assistant-thread"); } catch { /* Use latest. */ }
+      id = saved && list.some((item) => item.id === saved) ? saved : list[0]?.id ?? null;
+    }
+    if (!id) {
+      const created = await fetch("/api/assistant/conversations", { method: "POST" });
+      if (!created.ok) throw new Error("Conversation could not be created. Store actions are paused.");
+      id = z.object({ id: z.uuid() }).parse(await created.json()).id;
+      setConversations([{ id, title: "New conversation", updated_at: new Date().toISOString() }]);
+    }
+    await loadThread(id);
+  }
+
+  useEffect(() => {
+    if (!connected) return;
+    let cancelled = false;
+    const initialize = async () => {
+      try { await refreshConversations(); if (!cancelled) setHistoryError(""); }
+      catch (error) { if (!cancelled) setHistoryError(error instanceof Error ? error.message : "Conversation history is unavailable."); }
+      finally { if (!cancelled) setHistoryLoading(false); }
+    };
+    void initialize();
+    return () => { cancelled = true; };
+    // The shared workspace is mounted once for the authenticated layout.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected]);
+
+  useEffect(() => {
+    if (!connected) return;
+    const sync = () => {
+      if (document.visibilityState !== "visible" || busy || !activeThread.current) return;
+      void refreshConversations(activeThread.current).catch(() => setHistoryError("Conversation sync failed. Refresh before sending another action."));
+    };
+    const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("dukaansaathi-assistant") : null;
+    channel?.addEventListener("message", sync);
+    window.addEventListener("focus", sync);
+    return () => { channel?.close(); window.removeEventListener("focus", sync); };
+    // Refresh uses the current thread reference and does not need to restart for every message.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, busy]);
+
+  async function startConversation() {
+    if (busy) return;
+    setHistoryError("");
+    try {
+      const response = await fetch("/api/assistant/conversations", { method: "POST" });
+      if (!response.ok) throw new Error("A new conversation could not be created.");
+      const id = z.object({ id: z.uuid() }).parse(await response.json()).id;
+      await refreshConversations(id);
+      setHistoryOpen(false);
+    } catch (error) { setHistoryError(error instanceof Error ? error.message : "A new conversation could not be created."); }
+  }
+
+  async function changeConversation(id: string) {
+    if (busy || id === conversationId) return;
+    try { await loadThread(id); setHistoryOpen(false); setHistoryError(""); }
+    catch { setHistoryError("That conversation could not be loaded."); }
+  }
+
+  async function renameConversation(id: string) {
+    const title = editingTitle.trim();
+    if (!title) return;
+    const response = await fetch("/api/assistant/conversations", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, title }) });
+    if (!response.ok) { setHistoryError("Conversation could not be renamed."); return; }
+    setConversations((current) => current.map((item) => item.id === id ? { ...item, title } : item));
+    setEditingId(null);
+  }
+
+  async function deleteConversation(id: string) {
+    if (busy || !window.confirm("Delete this conversation and its messages? Store records will remain unchanged.")) return;
+    const response = await fetch("/api/assistant/conversations", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    if (!response.ok) { setHistoryError("Conversation could not be deleted."); return; }
+    try { await refreshConversations(id === conversationId ? undefined : conversationId ?? undefined); }
+    catch { setHistoryError("Conversation list could not be refreshed."); }
+  }
+
   function addMessage(message: Omit<Message, "id">): number {
     const id = nextId.current++;
     setMessages((current) => [...current, { id, ...message }]);
@@ -140,7 +258,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   async function showTurn(turn: AssistantResponse) {
     setAction(turn);
     setPending(turn.pending ?? null);
-    addMessage({ role: "assistant", text: turn.reply, result: turn, failed: turn.state === "failed" });
+    addMessage({ role: "assistant", text: turn.reply, result: turn, persistedId: turn.messageId, failed: turn.state === "failed" });
     if (turn.state === "confirmed") router.refresh();
     if (turn.speech) {
       const url = `data:${turn.speech.mimeType};base64,${turn.speech.data}`;
@@ -157,6 +275,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   }
 
   async function processPrompt(text: string, speak: boolean, retry = false) {
+    if (connected && (!conversationId || historyError)) { setHistoryError("Choose an available conversation before sending a store request."); return; }
     setBusy(true);
     setWorkingOn(speak ? "voice" : "request");
     setLastPrompt(text);
@@ -174,12 +293,16 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
       setVoiceState("reasoning");
       const response = await fetch("/api/assistant/turn", {
         method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key },
-        body: JSON.stringify({ text, speak, recent, pending }),
+        body: JSON.stringify({ text, speak, recent, pending, conversationId: conversationId ?? undefined }),
       });
       const turn = await readTurn(response);
       promptRequest.current = null;
       setVoiceState("executing");
       await showTurn(turn);
+      if (connected) {
+        setConversations((current) => current.map((item) => item.id === conversationId ? { ...item, updated_at: new Date().toISOString(), title: item.title === "New conversation" ? text.slice(0, 80) : item.title } : item));
+        if (typeof BroadcastChannel !== "undefined") { const channel = new BroadcastChannel("dukaansaathi-assistant"); channel.postMessage({ thread: conversationId }); channel.close(); }
+      }
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "The request could not be verified. Check store records before retrying.";
       setVoiceState("error");
@@ -203,7 +326,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   }
 
   async function processAttachment() {
-    if (!attachment || busy) return;
+    if (!attachment || busy || (connected && !conversationId)) return;
     setBusy(true);
     setWorkingOn("attachment");
     setAction(null);
@@ -218,9 +341,11 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
       const prepared = await prepareShoppingAttachment(selected.file);
       const form = new FormData();
       form.set("extractedText", prepared.extractedText);
+      if (conversationId) form.set("conversationId", conversationId);
       prepared.images.forEach((image) => form.append("images", image));
-      const response = await fetch("/api/assistant/attachment", { method: "POST", body: form });
+      const response = await fetch("/api/assistant/attachment", { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: form });
       await showTurn(await readTurn(response));
+      if (typeof BroadcastChannel !== "undefined") { const channel = new BroadcastChannel("dukaansaathi-assistant"); channel.postMessage({ thread: conversationId }); channel.close(); }
     } catch (reason) {
       setVoiceState("error");
       addMessage({ role: "assistant", text: reason instanceof Error ? reason.message : "The attachment could not be checked. No stock was changed.", failed: true });
@@ -230,25 +355,25 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   }
 
   async function confirmSale(draft: ShoppingDraft, paymentMethod: "cash" | "upi" | "card", draftMessageId: number) {
-    if (busy || !draft.canConfirm || inactiveDrafts.includes(draftMessageId)) return;
+    if (busy || !draft.canConfirm || inactiveDrafts.includes(draftMessageId) || (connected && !conversationId)) return;
+    const savedDraftId = messages.find((message) => message.id === draftMessageId)?.persistedId;
+    if (!savedDraftId) { setHistoryError("This draft was not saved. Check the list again before recording a sale."); return; }
     setBusy(true);
     setAction(null);
     setWorkingOn("request");
     addMessage({ role: "user", text: `Confirm and record this basket · ${paymentMethod.toUpperCase()}` });
     try {
-      const requestKey = saleRequestKeys.current.get(draftMessageId) ?? crypto.randomUUID();
-      saleRequestKeys.current.set(draftMessageId, requestKey);
       const items = draft.items.map((item) => ({ productId: z.uuid().parse(item.productId), quantity: item.quantity }));
       const response = await fetch("/api/assistant/confirm-sale", {
-        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": requestKey },
-        body: JSON.stringify({ confirmed: true, items, paymentMethod }),
+        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": savedDraftId },
+        body: JSON.stringify({ confirmed: true, items, paymentMethod, conversationId: conversationId ?? undefined, draftMessageId: savedDraftId }),
       });
       const turn = await readTurn(response);
       if (turn.state === "confirmed") {
         setInactiveDrafts((current) => current.includes(draftMessageId) ? current : [...current, draftMessageId]);
-        saleRequestKeys.current.delete(draftMessageId);
       }
       await showTurn(turn);
+      if (typeof BroadcastChannel !== "undefined") { const channel = new BroadcastChannel("dukaansaathi-assistant"); channel.postMessage({ thread: conversationId }); channel.close(); }
     } catch (reason) {
       setVoiceState("error");
       addMessage({ role: "assistant", text: reason instanceof Error ? reason.message : "Sale confirmation was not verified. Check Sales before trying again.", failed: true });
@@ -325,10 +450,20 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   const realVoice = providerMode === "gnani";
   const realReasoning = reasonerMode === "openrouter";
   return <div className="assistant-page assistant-copilot">
-    <header className="assistant-heading"><div><h1>Ask Saathi<span>.</span></h1><p>Run your store in your own words. Speak, type, or check a shopping list.</p></div><span className="assistant-mode-badge"><span /> {connected ? "STORE CONNECTED" : "PREVIEW MODE"} · {realReasoning ? "AI REASONING" : "MOCK REASONING"}</span></header>
+    <header className="assistant-heading"><div><h1>Ask Saathi<span>.</span></h1><p>Run your store in your own words. Speak, type, or check a shopping list.</p></div><span className="assistant-mode-badge"><span /> {connected ? "STORE CONNECTED" : "PREVIEW MODE"} · {realReasoning ? "OPENROUTER + LOCAL PARSER" : "MOCK REASONING"} · {realVoice ? "GNANI VOICE" : "SAMPLE VOICE"}</span>{!expanded && <button className="assistant-drawer-close" type="button" onClick={onClose} aria-label="Close Saathi assistant"><X size={19} /></button>}</header>
+    <div className="assistant-conversation-toolbar"><button type="button" onClick={() => setHistoryOpen((value) => !value)} aria-expanded={historyOpen} aria-controls="assistant-thread-history"><History size={17} /> History <span>{conversations.length}</span></button><button type="button" onClick={() => void startConversation()} disabled={busy || !connected}><Plus size={17} /> New chat</button><span>{conversationId ? conversations.find((item) => item.id === conversationId)?.title ?? "Conversation" : historyLoading ? "Loading history…" : "History unavailable"}</span></div>
+    {historyError && <p className="assistant-history-error" role="alert">{historyError}</p>}
+    {historyOpen && <div className="assistant-thread-history" id="assistant-thread-history" aria-label="Conversation history">
+      {conversations.map((thread) => <div className="assistant-thread-row" key={thread.id} data-active={thread.id === conversationId}>
+        {editingId === thread.id ? <form onSubmit={(event) => { event.preventDefault(); void renameConversation(thread.id); }}><input aria-label="Conversation title" value={editingTitle} maxLength={80} onChange={(event) => setEditingTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setEditingId(null); }} autoFocus /><button type="submit">Save</button></form>
+          : <button type="button" className="assistant-thread-select" onClick={() => void changeConversation(thread.id)} disabled={busy} aria-current={thread.id === conversationId ? "true" : undefined}>{thread.title}</button>}
+        <button type="button" aria-label={`Rename ${thread.title}`} onClick={() => { setEditingId(thread.id); setEditingTitle(thread.title); }}><Pencil size={15} /></button>
+        <button type="button" aria-label={`Delete ${thread.title}`} onClick={() => void deleteConversation(thread.id)}><Trash2 size={15} /></button>
+      </div>)}
+    </div>}
     <div className="assistant-grid">
       <section className="conversation-panel" aria-label="Assistant conversation">
-        <div className="conversation-head"><div><span className="conversation-head-mark"><AudioLines size={20} strokeWidth={1.5} aria-hidden="true" /></span><div><strong>Store conversation</strong><span>{connected ? "Answers from your shop records" : "Connect a shop to act"}</span></div></div><span>THIS SESSION</span></div>
+        <div className="conversation-head"><div><span className="conversation-head-mark"><AudioLines size={20} strokeWidth={1.5} aria-hidden="true" /></span><div><strong>Store conversation</strong><span>{connected ? "Answers from your shop records" : "Connect a shop to act"}</span></div></div><span>{connected ? "SAVED TO YOUR SHOP" : "PREVIEW SESSION"}</span></div>
         <div className="conversation-feed" aria-live="polite">
           {messages.length === 0 && <div className="assistant-welcome"><div className="assistant-welcome-mark"><AudioLines size={27} strokeWidth={1.4} aria-hidden="true" /></div><h2>What needs doing<br /><em>in your shop?</em></h2><p>{connected ? "Ask a question, update stock, or turn a list into a checked draft. Store changes appear only after they are saved." : "Connect your shop to check real stock, khata, sales and orders."}</p><button className="assistant-speak-primary" type="button" onClick={() => void toggleVoice()} disabled={busy || (realVoice && !voiceAvailable)}><Mic size={19} aria-hidden="true" /> {realVoice ? "Speak to Saathi" : "Try a sample voice request"}</button></div>}
           {messages.map((message, index) => <article ref={index === messages.length - 1 ? latestMessage : undefined} key={message.id} className={`conversation-entry ${message.role}`} data-state={message.failed ? "failed" : message.result?.state}><span className="conversation-speaker">{message.role === "user" ? "YOU" : "SAATHI"}</span><div className="conversation-body">{(message.result || message.failed) && <span className="conversation-outcome">{message.failed ? "Needs attention" : message.result?.state === "confirmed" ? "Store confirmed" : message.result?.state === "draft" ? "For review" : message.result?.state === "unsupported" ? "Try another request" : "Awaiting detail"}</span>}<p>{message.text}</p>
@@ -357,7 +492,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
             </div>
             <label className="assistant-language-control"><span className="sr-only">Voice language</span><select aria-label="Voice language" value={voiceLanguage} onChange={(event) => setVoiceLanguage(event.target.value as typeof voiceLanguage)} disabled={busy || voiceState === "listening"}><option value="hi-IN">हिंदी</option><option value="en-IN">EN</option></select></label>
             <button className="assistant-mic" type="button" disabled={busy || (realVoice && !voiceAvailable)} aria-label={realVoice ? voiceState === "listening" ? "Stop recording" : "Start recording" : "Play sample voice flow"} onClick={() => void toggleVoice()}>{realVoice && voiceState === "listening" ? <Square size={17} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}<span>{realVoice ? voiceState === "listening" ? "Stop" : "Speak" : "Sample"}</span></button>
-            <button className="assistant-send" type="submit" disabled={busy || voiceState === "listening" || (!input.trim() && !attachment)} aria-label="Send message"><ArrowUp size={19} aria-hidden="true" /></button></form>
+            <button className="assistant-send" type="submit" disabled={busy || historyLoading || Boolean(historyError) || (connected && !conversationId) || voiceState === "listening" || (!input.trim() && !attachment)} aria-label="Send message"><ArrowUp size={19} aria-hidden="true" /></button></form>
           <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" tabIndex={-1} onChange={(event) => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
           <input ref={pdfInput} type="file" accept="application/pdf,.pdf" className="sr-only" tabIndex={-1} onChange={(event) => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
           <input ref={cameraInput} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" tabIndex={-1} onChange={(event) => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} />

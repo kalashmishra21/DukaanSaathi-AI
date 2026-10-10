@@ -49,6 +49,13 @@ function fakeRepository() {
 }
 
 describe("business boundary", () => {
+  it("asks for a missing product's selling price before creating stock", async () => {
+    const fake = fakeRepository();
+    const result = await new BusinessToolExecutor(fake.repository).execute({ intent: "inventory.adjust",
+      arguments: { product: "Ice Cream", delta: 10, unit: "unit" } });
+    expect(result).toMatchObject({ ok: false, clarification: { pending: { kind: "product-create-price", product: "Ice Cream", openingStock: 10 } } });
+    expect(fake.getStock()).toBe(20);
+  });
   it("derives reorder quantities and rejects invalid purchase orders", () => {
     const suggestions = reorderSuggestions([{ id: "a", name: "Milk", current_stock: 3, low_stock_threshold: 5, cost_price: 20, selling_price: 25 },
       { id: "b", name: "Tea", current_stock: 20, low_stock_threshold: 5, cost_price: null, selling_price: 10 }]);

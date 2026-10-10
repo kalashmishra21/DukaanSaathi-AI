@@ -87,7 +87,15 @@ export class BusinessToolExecutor implements TrustedToolExecutor {
         }
         case "inventory.adjust": {
           const product = matchByName(await this.repository.products(), call.arguments.product);
-          if (!product) return { ok: false, error: "Product not found." };
+          if (!product && call.arguments.delta > 0 && call.arguments.unit) return clarificationResult(
+            `${call.arguments.product} is not in inventory. What selling price should I use per ${call.arguments.unit} to create it with ${call.arguments.delta} opening units? Nothing has been changed.`,
+            { kind: "product-create-price", product: call.arguments.product, unit: call.arguments.unit, openingStock: call.arguments.delta },
+          );
+          if (!product && call.arguments.delta > 0) return clarificationResult(
+            `${call.arguments.product} is not in inventory. What unit should I use to create it with ${call.arguments.delta} opening units? No stock changed.`,
+            { kind: "product-create-unit", product: call.arguments.product, openingStock: call.arguments.delta },
+          );
+          if (!product) return { ok: false, error: "Product not found. No stock changed." };
           const newStock = await this.repository.adjustStock(product.id, call.arguments.delta, this.requestKey);
           return { ok: true, data: { intent: call.intent, product: product.name, delta: call.arguments.delta, newStock } };
         }

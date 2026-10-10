@@ -28,7 +28,7 @@ export function LiquidHeaderEnhancement() {
           frost: 0.01,
           shadow: false,
           specular: true,
-          tint: "rgba(117, 157, 125, 0.06)",
+          tint: "rgba(116, 134, 225, 0.055)",
           interaction: "none",
           reveal: "none",
         });

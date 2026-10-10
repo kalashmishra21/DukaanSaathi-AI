@@ -11,6 +11,7 @@ const orderIndexMigration = readFileSync("supabase/migrations/20261008190256_pur
 const stage13Migration = readFileSync("supabase/migrations/20261010090000_mutation_idempotency_and_rate_limits.sql", "utf8");
 const clarificationMigration = readFileSync("supabase/migrations/20261010100000_assistant_pending_clarifications.sql", "utf8");
 const transitionGuardMigration = readFileSync("supabase/migrations/20261010110000_order_transition_confirmation_guard.sql", "utf8");
+const conversationMigration = readFileSync("supabase/migrations/20261010180000_assistant_conversations.sql", "utf8");
 const userId = "11111111-1111-4111-8111-111111111111";
 const otherId = "22222222-2222-4222-8222-222222222222";
 
@@ -37,6 +38,7 @@ describe("Supabase migration in local PostgreSQL", () => {
       await db.exec(stage13Migration);
       await db.exec(clarificationMigration);
       await db.exec(transitionGuardMigration);
+      await db.exec(conversationMigration);
       const orderItemShopIndex = await db.query<{ exists: boolean }>(`
         select exists (
           select 1 from pg_indexes
@@ -76,6 +78,29 @@ describe("Supabase migration in local PostgreSQL", () => {
       const shopId = first.rows[0].bootstrap_demo_shop;
       const again = await db.query<{ bootstrap_demo_shop: string }>("select public.bootstrap_demo_shop()");
       expect(again.rows[0].bootstrap_demo_shop).toBe(shopId);
+
+      const createdThread = await db.query<{ id: string }>(`select public.create_assistant_conversation('${shopId}') id`);
+      const threadId = createdThread.rows[0].id;
+      const turnKey = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+      const reserved = await db.query<{ result: { status: string } }>(`select public.reserve_assistant_turn('${shopId}', '${threadId}', '${turnKey}', 'Aaj ki sale batao') result`);
+      expect(reserved.rows[0].result.status).toBe("reserved");
+      const duplicateBusy = await db.query<{ result: { status: string } }>(`select public.reserve_assistant_turn('${shopId}', '${threadId}', '${turnKey}', 'Aaj ki sale batao') result`);
+      expect(duplicateBusy.rows[0].result.status).toBe("busy");
+      await expect(db.query(`select public.reserve_assistant_turn('${shopId}', '${threadId}', '${turnKey}', 'Add stock')`)).rejects.toThrow();
+      const completed = await db.query(`select public.complete_assistant_turn('${shopId}', '${threadId}', '${turnKey}',
+        'Today''s sales are zero.', '{"state":"confirmed","title":"Sales","intent":"sales.getDailySummary","detail":"Count 0","reply":"Today''s sales are zero."}'::jsonb,
+        '{"kind":"product-create-price","product":"Bread","unit":"packet","openingStock":50}'::jsonb, '${turnKey}')`);
+      expect(completed.rows).toHaveLength(1);
+      const replay = await db.query<{ result: { status: string; result: { reply: string } } }>(`select public.reserve_assistant_turn('${shopId}', '${threadId}', '${turnKey}', 'Aaj ki sale batao') result`);
+      expect(replay.rows[0].result).toMatchObject({ status: "completed", result: { reply: "Today's sales are zero." } });
+      const savedMessages = await db.query<{ count: number }>(`select count(*)::int count from public.assistant_messages where conversation_id = '${threadId}'`);
+      expect(savedMessages.rows[0].count).toBe(2);
+      const threadTwo = (await db.query<{ id: string }>(`select public.create_assistant_conversation('${shopId}') id`)).rows[0].id;
+      const nextKey = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+      const threadOneNext = await db.query<{ result: { pending: { kind: string } } }>(`select public.reserve_assistant_turn('${shopId}', '${threadId}', '${nextKey}', 'Aaj ki sale batao') result`);
+      const threadTwoNext = await db.query<{ result: { pending: unknown } }>(`select public.reserve_assistant_turn('${shopId}', '${threadTwo}', '${nextKey}', 'Aaj ki sale batao') result`);
+      expect(threadOneNext.rows[0].result.pending.kind).toBe("product-create-price");
+      expect(threadTwoNext.rows[0].result.pending).toBeNull();
 
       const clarificationKey = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
       await db.query(`select public.save_assistant_pending_clarification('${shopId}', '{"kind":"product-create-price","product":"Bread","unit":"packet","openingStock":50}'::jsonb, '${clarificationKey}')`);
@@ -120,6 +145,11 @@ describe("Supabase migration in local PostgreSQL", () => {
       await expect(db.query(`insert into public.purchase_orders(shop_id,supplier_id) values ('${shopId}', '${supplier.rows[0].id}')`)).rejects.toThrow();
       await expect(db.query(`update public.purchase_orders set status = 'draft' where id = '${orderId}'`)).rejects.toThrow();
       await db.exec(`set request.jwt.claim.sub = '${otherId}';`);
+      const hiddenThreads = await db.query<{ count: number }>(`select count(*)::int count from public.assistant_conversations where id = '${threadId}'`);
+      const hiddenMessages = await db.query<{ count: number }>(`select count(*)::int count from public.assistant_messages where conversation_id = '${threadId}'`);
+      expect(hiddenThreads.rows[0].count).toBe(0);
+      expect(hiddenMessages.rows[0].count).toBe(0);
+      await expect(db.query(`select public.reserve_assistant_turn('${shopId}', '${threadId}', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Add stock')`)).rejects.toThrow();
       for (const table of ["suppliers", "purchase_orders", "purchase_order_items"]) {
         const hidden = await db.query<{ count: number }>(`select count(*)::integer count from public.${table} where shop_id = '${shopId}'`);
         expect(hidden.rows[0].count).toBe(0);
