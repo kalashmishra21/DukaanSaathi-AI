@@ -7,6 +7,16 @@ const completion = (name: string, args: unknown) => Response.json({
 });
 
 describe("OpenRouter reasoner trust boundary", () => {
+  it("charges model quota only when a request actually reaches OpenRouter", async () => {
+    let quotaChecks = 0;
+    const request: typeof fetch = async () => completion("inventory_adjust", { product: "Maggi", delta: 20 });
+    const reasoner = new OpenRouterReasoner("test-key", model, request, () => "2026-10-08", async () => { quotaChecks += 1; });
+    await reasoner.reason({ text: "Maggi ke 20 packet add kar do" });
+    expect(quotaChecks).toBe(0);
+    await reasoner.reason({ text: "Increase Maggi inventory by twenty packets" });
+    expect(quotaChecks).toBe(1);
+  });
+
   it("proposes one Zod-valid tool call without executing it", async () => {
     let requestBody: Record<string, unknown> | undefined;
     const request: typeof fetch = async (url, options) => {

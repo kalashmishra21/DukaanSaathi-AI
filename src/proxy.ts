@@ -3,6 +3,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseConfig } from "./lib/supabase/config";
 
 export async function proxy(request: NextRequest) {
+  const publicEntry = request.nextUrl.pathname === "/" || request.nextUrl.pathname === "/signin";
+  // Anonymous public pages need no session refresh. Avoid a Supabase auth
+  // lookup on every landing request while still checking returning users.
+  if (publicEntry && !request.cookies.getAll().some(({ name }) => name.startsWith("sb-") && name.includes("-auth-token"))) {
+    return NextResponse.next({ request });
+  }
   const config = getSupabaseConfig();
   if (!config) return NextResponse.next({ request });
   let response = NextResponse.next({ request });
@@ -18,7 +24,7 @@ export async function proxy(request: NextRequest) {
   });
   try {
     const { data } = await supabase.auth.getClaims();
-    if (data?.claims?.sub && (request.nextUrl.pathname === "/" || request.nextUrl.pathname === "/signin")) {
+    if (data?.claims?.sub && publicEntry) {
       const redirect = NextResponse.redirect(new URL("/app", request.url));
       response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
       redirect.headers.set("Cache-Control", "private, no-store");

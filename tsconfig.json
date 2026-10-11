@@ -36,8 +36,8 @@
     ".next/dev/types/**/*.ts",
     ".next-prod/types/**/*.ts",
     ".next-prod/dev/types/**/*.ts",
-    ".next-prod-local/types/**/*.ts",
-    ".next-prod-local/dev/types/**/*.ts",
+    ".next-prod-build-local/types/**/*.ts",
+    ".next-prod-build-local/dev/types/**/*.ts",
     ".next-dev-local/types/**/*.ts",
     ".next-dev-local/dev/types/**/*.ts"
   ],

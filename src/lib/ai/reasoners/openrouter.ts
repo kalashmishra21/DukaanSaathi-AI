@@ -63,6 +63,7 @@ export class OpenRouterReasoner {
     private readonly model: string,
     private readonly request: typeof fetch = fetch,
     private readonly today: () => string = todayInIndia,
+    private readonly beforeNetworkRequest?: () => Promise<void>,
   ) {}
 
   async reason(input: ReasoningInput): Promise<ReasoningResult> {
@@ -73,6 +74,7 @@ export class OpenRouterReasoner {
     // The result still crosses the same Zod and trusted-tool boundary.
     const recognized = await new MockAIProvider(this.today).reason({ ...input, text });
     if (recognized.kind !== "unsupported") return reasoningResultSchema.parse(recognized);
+    await this.beforeNetworkRequest?.();
     const deadline = Date.now() + 40_000;
     let response: Response;
     try {

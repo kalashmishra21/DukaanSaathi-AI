@@ -12,7 +12,7 @@ import { BusinessToolExecutor, describeToolResult } from "@/server/tools/busines
 import { executeValidatedToolCall } from "@/server/tools/contracts";
 import { readIdempotencyKey, missingIdempotencyKey } from "@/server/security/idempotency";
 import { enforceShopRateLimit } from "@/server/security/rate-limit";
-import { ProviderRequestError } from "@/lib/ai/provider-http";
+import { ProviderRequestError, retryAfterSeconds } from "@/lib/ai/provider-http";
 import { isClarificationCancel, shouldContinuePending } from "@/lib/assistant/merchant-language";
 import type { AssistantResponse } from "@/lib/business/assistant-response";
 import type { PendingClarification } from "@/lib/ai/types/tool-call";
@@ -50,10 +50,6 @@ export async function POST(request: Request) {
   }
   const assistantLimit = await enforceShopRateLimit(context, "assistant_turn");
   if (assistantLimit) return assistantLimit;
-  if (config.AI_REASONER === "openrouter") {
-    const reasonerLimit = await enforceShopRateLimit(context, "openrouter_reasoner");
-    if (reasonerLimit) return reasonerLimit;
-  }
   if (parsed.data.speak && config.AI_PROVIDER === "gnani") {
     const speechLimit = await enforceShopRateLimit(context, "assistant_speech");
     if (speechLimit) return speechLimit;
@@ -95,7 +91,10 @@ export async function POST(request: Request) {
   }
 
   let provider;
-  try { provider = createAIProvider(); } catch {
+  try { provider = createAIProvider(process.env, async () => {
+    const limit = await enforceShopRateLimit(context, "openrouter_reasoner");
+    if (limit) throw new ProviderRequestError("OpenRouter", limit.status, limit.headers.get("Retry-After"));
+  }); } catch {
     return finish({ state: "failed", title: "AI provider unavailable", intent: "assistant.reason",
       detail: "The selected provider is not configured.", reply: "The selected AI provider is not configured. Nothing was changed." }, 503, pending, continuing ? savedRequestKey : null);
   }
@@ -103,10 +102,13 @@ export async function POST(request: Request) {
   try { reasoning = reasoningResultSchema.parse(await provider.reason({ text: parsed.data.text, recent: parsed.data.recent, pending })); }
   catch (error) {
     if (error instanceof ProviderRequestError) {
-      return finish({ state: "failed", title: "Reasoner unavailable", intent: "assistant.reason",
+      const response = await finish({ state: "failed", title: "Reasoner unavailable", intent: "assistant.reason",
         detail: error.status === 429 ? "The AI provider is rate limited." : "The AI provider is unavailable.",
         reply: error.status === 429 ? "The AI service is busy. Please wait and try again; nothing was changed." : "The AI service is temporarily unavailable. Nothing was changed." },
-      error.status === 429 ? 429 : 503, pending, continuing ? savedRequestKey : null);
+        error.status === 429 ? 429 : 503, pending, continuing ? savedRequestKey : null);
+      const retryAfter = error.status === 429 ? retryAfterSeconds(error.retryAfter) : null;
+      if (retryAfter !== null) response.headers.set("Retry-After", String(retryAfter));
+      return response;
     }
     console.warn("Assistant reasoning rejected:", error instanceof Error && /^OpenRouter /.test(error.message) ? error.message : error instanceof Error ? error.name : "UnknownError");
     return finish({ state: "failed", title: "Reasoning failed", intent: "assistant.reason", detail: "No action was taken.",

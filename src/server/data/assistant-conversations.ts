@@ -43,11 +43,11 @@ export class AssistantConversationRepository {
         .eq("owner_id", this.context.userId).maybeSingle(),
       this.context.client.from("assistant_messages")
         .select("id,role,text,result,request_key,created_at").eq("conversation_id", id).eq("shop_id", this.context.shop.id)
-        .order("created_at").order("id").limit(300),
+        .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(300),
     ]);
     if (threadError || !thread) throw new Error("Conversation not found in this shop.");
     if (error) throw new Error("Conversation messages are unavailable.");
-    const safeMessages = z.array(messageSchema).parse(messages).map((message) => {
+    const safeMessages = z.array(messageSchema).parse(messages).reverse().map((message) => {
       const parsed = message.result === null ? null : assistantResponseSchema.safeParse(message.result);
       return { ...message, result: parsed?.success ? parsed.data : null };
     });

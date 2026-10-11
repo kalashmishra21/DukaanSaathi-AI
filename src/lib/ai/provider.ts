@@ -6,6 +6,7 @@ import type { AIProvider } from "./types/provider";
 
 export function createAIProvider(
   environment: Record<string, string | undefined> = process.env,
+  beforeOpenRouterRequest?: () => Promise<void>,
 ): AIProvider {
   const config = readProviderConfig(environment);
   const voice = config.AI_PROVIDER === "mock" ? new MockAIProvider() : (() => {
@@ -14,7 +15,8 @@ export function createAIProvider(
   })();
   if (config.AI_REASONER === "mock") return voice;
   if (!process.env.OPENROUTER_API_KEY?.trim()) throw new Error("OPENROUTER_API_KEY is required when AI_REASONER=openrouter.");
-  const reasoner = new OpenRouterReasoner(process.env.OPENROUTER_API_KEY, config.OPENROUTER_MODEL);
+  const reasoner = new OpenRouterReasoner(process.env.OPENROUTER_API_KEY, config.OPENROUTER_MODEL,
+    fetch, undefined, beforeOpenRouterRequest);
   return {
     transcribe: (input) => voice.transcribe(input),
     reason: (input) => reasoner.reason(input),
