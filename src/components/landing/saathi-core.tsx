@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CoreFallback } from "./core-poster";
 
 export type CoreMode = "idle" | "listening" | "thinking" | "action" | "result";
 const CoreScene = dynamic(() => import("./core-scene"), { ssr: false });
@@ -14,28 +15,6 @@ const states: Record<CoreMode, { title: string; detail: string; visual: string }
   action: { title: "Validated action preview", detail: "Proposed stock adjustment: +20 Maggi packets. Nothing has been saved.", visual: "Faceted Saathi Core in simulated validation state" },
   result: { title: "Simulated stock result", detail: "Illustrative outcome: +20 packets. No store record changed.", visual: "Faceted Saathi Core in simulated result state" },
 };
-
-function CoreFallback({ description }: { description: string }) {
-  return <div className="core-object" role="img" aria-label={description}>
-    <svg viewBox="0 0 480 480" aria-hidden="true" focusable="false">
-      <defs><linearGradient id="landing-core-face" x1=".1" y1="0" x2=".9" y2="1"><stop offset="0" stopColor="#e6eaff" /><stop offset=".45" stopColor="#8798ed" /><stop offset="1" stopColor="#344381" /></linearGradient></defs>
-      <path className="core-shadow" d="M240 52 363 103 424 226 382 349 263 427 130 395 54 286 75 157 169 68Z" />
-      <path className="facet facet-back" d="M240 52 363 103 424 226 382 349 263 427 130 395 54 286 75 157 169 68Z" />
-      <path className="facet facet-a" d="M240 52 363 103 296 170 240 210 169 68Z" />
-      <path className="facet facet-b" d="M363 103 424 226 345 250 296 170Z" />
-      <path className="facet facet-c" d="M424 226 382 349 286 315 345 250Z" />
-      <path className="facet facet-d" d="M382 349 263 427 240 352 286 315Z" />
-      <path className="facet facet-e" d="M263 427 130 395 168 309 240 352Z" />
-      <path className="facet facet-f" d="M130 395 54 286 136 242 168 309Z" />
-      <path className="facet facet-g" d="M54 286 75 157 143 182 136 242Z" />
-      <path className="facet facet-h" d="M75 157 169 68 240 210 143 182Z" />
-      <path className="facet facet-center" d="M240 210 296 170 345 250 286 315 240 352 168 309 136 242 143 182Z" />
-      <path className="facet-aperture" d="M240 210 296 170 345 250 286 315Z" /><circle className="facet-aperture-rim" cx="284" cy="246" r="27" /><circle className="facet-aperture-eye" cx="284" cy="246" r="11" />
-      <path className="facet-line" d="M240 52 240 210M363 103 296 170M424 226 345 250M382 349 286 315M263 427 240 352M130 395 168 309M54 286 136 242M75 157 143 182M169 68 143 182M240 210 345 250M240 210 168 309M240 352 240 210" />
-      <path className="facet-rim" d="M240 52 363 103 424 226 382 349 263 427 130 395 54 286 75 157 169 68Z" />
-    </svg>
-  </div>;
-}
 
 function LiquidLens() {
   const lens = useRef<{ destroy?: () => void } | null>(null);

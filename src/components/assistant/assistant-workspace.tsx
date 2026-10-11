@@ -8,7 +8,6 @@ import { z } from "zod";
 import { assistantResponseSchema, type AssistantResponse } from "@/lib/business/assistant-response";
 import { pendingClarificationSchema, type recentTurnSchema } from "@/lib/ai/types/tool-call";
 import type { ShoppingDraft } from "@/lib/assistant/shopping-list";
-import { prepareShoppingAttachment } from "@/lib/assistant/read-attachment";
 import { startVoiceRecording, type VoiceRecording } from "@/lib/ai/capture";
 import type { VoiceState } from "@/features/assistant/voice-states";
 import { VoiceStateIndicator } from "./voice-state-indicator";
@@ -338,6 +337,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
     setInput("");
     try {
       setVoiceState("reasoning");
+      const { prepareShoppingAttachment } = await import("@/lib/assistant/read-attachment");
       const prepared = await prepareShoppingAttachment(selected.file);
       const form = new FormData();
       form.set("extractedText", prepared.extractedText);

@@ -4,6 +4,8 @@ import { MockAIProvider } from "../providers/mock";
 import { reasoningResultSchema, type ReasoningResult, type ToolCall } from "../types/tool-call";
 import type { ReasoningInput } from "../types/provider";
 import { ProviderRequestError, retryProviderRequest } from "../provider-http";
+import { isAmbiguousMerchantText, isConversationOnlyMessage } from "../../assistant/merchant-language";
+import { isGroundedToolCall, mentionsMerchantEntity } from "../../assistant/utterance-safety";
 
 const endpoint = "https://openrouter.ai/api/v1/chat/completions";
 const field = { type: "string" } as const;
@@ -65,6 +67,8 @@ export class OpenRouterReasoner {
 
   async reason(input: ReasoningInput): Promise<ReasoningResult> {
     const text = z.string().trim().min(1).max(500).parse(input.text);
+    if (isConversationOnlyMessage(text)) return { kind: "unsupported", message: "Hello! Tell me what you would like to check or change in your store." };
+    if (isAmbiguousMerchantText(text)) return { kind: "clarify", question: "I am not sure I heard the request clearly. Please repeat the item, action and amount. Nothing was changed." };
     // Exact supported merchant phrases use deterministic reasoning before the model.
     // The result still crosses the same Zod and trusted-tool boundary.
     const recognized = await new MockAIProvider(this.today).reason({ ...input, text });
@@ -109,12 +113,19 @@ export class OpenRouterReasoner {
       let args: unknown;
       try { args = JSON.parse(calls[0].function.arguments); } catch { throw new Error("OpenRouter returned invalid clarification arguments."); }
       const customer = z.object({ customer: z.string().trim().min(1).max(120) }).strict().parse(args).customer;
+      if (!mentionsMerchantEntity(text, customer)) {
+        return { kind: "clarify", question: "Which customer should I open a khata for? No account was created." };
+      }
       return reasoningResultSchema.parse({ kind: "clarify", question: `${customer} ke khate mein shuru mein kitna udhaar likhun?`, pending: { kind: "open-account-amount", customer } });
     }
     const intent = intentByFunction[calls[0].function.name];
     if (!intent) throw new Error("OpenRouter proposed an unknown action.");
     let args: unknown;
     try { args = JSON.parse(calls[0].function.arguments); } catch { throw new Error("OpenRouter returned invalid tool arguments."); }
-    return reasoningResultSchema.parse({ kind: "tool_call", tool: { intent, arguments: args } });
+    const proposal = reasoningResultSchema.parse({ kind: "tool_call", tool: { intent, arguments: args } });
+    if (proposal.kind !== "tool_call" || !isGroundedToolCall(text, proposal.tool)) {
+      return { kind: "clarify", question: "I could not confirm the item and action from that request. Please say exactly what to check or change, including any quantity or amount. Nothing was changed." };
+    }
+    return proposal;
   }
 }

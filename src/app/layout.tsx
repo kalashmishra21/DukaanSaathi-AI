@@ -19,8 +19,8 @@ const manrope = localFont({
 });
 const newsreader = localFont({
   src: [
-    { path: "../../node_modules/@fontsource-variable/newsreader/files/newsreader-latin-wght-normal.woff2", style: "normal", weight: "200 800" },
-    { path: "../../node_modules/@fontsource-variable/newsreader/files/newsreader-latin-wght-italic.woff2", style: "italic", weight: "200 800" },
+    { path: "../assets/fonts/newsreader-400-normal.woff2", style: "normal", weight: "400" },
+    { path: "../assets/fonts/newsreader-400-italic.woff2", style: "italic", weight: "400" },
   ],
   variable: "--font-newsreader",
   display: "swap",

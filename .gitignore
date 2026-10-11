@@ -3,6 +3,7 @@
 /.next
 /.next-prod
 /.next-prod-*/
+/.next-dev-*/
 /out
 /build
 /coverage

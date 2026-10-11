@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowDown, ArrowUpRight } from "lucide-react";
 import { SiteHeader } from "@/components/layout/site-header";
-import { SaathiCore } from "@/components/landing/saathi-core";
+import { DeferredSaathiCore } from "@/components/landing/deferred-saathi-core";
 import { DeferredLandingVoiceDemo } from "@/components/landing/deferred-voice-demo";
 import { LandingStory } from "@/components/landing/landing-story";
 import { publicSiteUrl } from "@/lib/seo/site-url";
@@ -52,7 +52,7 @@ export default function Home() {
           </div>
           <p className="hero-honesty"><span aria-hidden="true" /> Simulated visual sequence · no microphone or store action</p>
         </div>
-        <SaathiCore />
+        <DeferredSaathiCore />
       </section>
 
       <LandingStory />

@@ -101,6 +101,13 @@ function clarification(question: string, pending?: PendingClarification, intent?
 }
 
 export function isClarificationCancel(text: string): boolean { return /^(?:cancel|stop|nahi|no|nope|rehne do|mat karo|chhodo)$/iu.test(normalizeMerchantText(text)); }
+export function isConversationOnlyMessage(rawText: string): boolean {
+  const text = normalizeMerchantText(rawText).toLocaleLowerCase("en-IN");
+  return /^(?:(?:hi+|hello+|hey+|namaste|namaskar)(?: saathi)?|good (?:morning|afternoon|evening)|thanks|thank you|okay?|hmm+|umm+|uh+)$/iu.test(text);
+}
+export function isAmbiguousMerchantText(rawText: string): boolean {
+  return /\b(?:maybe|perhaps|shayad|probably|not sure|unclear|inaudible)\b/iu.test(normalizeMerchantText(rawText));
+}
 function isYes(text: string): boolean { return /^(?:haan|ha|yes|y|confirm|confirmed|kar do|karo|theek hai|sahi|inr|rupees?|rupaye|₹)$/iu.test(normalizeMerchantText(text)); }
 
 function parseMoney(value: string): { amount: number; currency: "inr" | "other" | "unspecified" } | null {
@@ -292,6 +299,8 @@ export function completePendingClarification(rawPending: unknown, text: string):
 
 export function reasonMerchantCommand(rawText: string, today: string): ReasoningResult {
   const text = normalizeMerchantText(rawText);
+  if (isConversationOnlyMessage(rawText)) return { kind: "unsupported", message: "Hello! Tell me what you would like to check or change in your store." };
+  if (isAmbiguousMerchantText(rawText)) return clarification("I am not sure I heard the request clearly. Please repeat the item, action and amount. Nothing was changed.");
   const pending = /^(?:customer add(?: karo)?|add customer)$/iu.test(text)
     ? clarification("What is the customer's name? Nothing has been added yet.", { kind: "customer-name" }, "customer.create") : null;
   if (pending) return pending;
@@ -423,6 +432,8 @@ export function completePending(rawPending: unknown, text: string): ReasoningRes
 export function shouldContinuePending(rawPending: unknown, rawText: string): boolean {
   const parsed = pendingClarificationSchema.safeParse(rawPending);
   if (!parsed.success) return false;
+  if (isConversationOnlyMessage(rawText)) return false;
+  if (isAmbiguousMerchantText(rawText)) return false;
   const text = normalizeMerchantText(rawText).toLocaleLowerCase("en-IN");
   if (isClarificationCancel(rawText)) return true;
   if (parsed.data.kind === "khata-currency-confirm" && /^(?:haan|ha|yes|confirm)?\s*,?\s*(?:inr|rs|rupees?|rupaye)$/iu.test(text)) return true;

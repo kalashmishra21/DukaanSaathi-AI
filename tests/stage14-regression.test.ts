@@ -4,6 +4,21 @@ import { MockAIProvider } from "../src/lib/ai/providers/mock";
 const provider = new MockAIProvider(() => "2026-10-10");
 
 describe("Stage 14 merchant regressions", () => {
+  it.each(["hi", "hii", "hello", "namaste"])("does not turn greeting %s into a pending customer or supplier", async (text) => {
+    for (const pending of [{ kind: "customer-name" }, { kind: "supplier-name" }] as const) {
+      expect(await provider.reason({ text, pending })).toMatchObject({ kind: "unsupported" });
+    }
+  });
+  it("does not let a greeting or uncertain transcript complete a pending product action", async () => {
+    const pending = { kind: "product-existing-confirm" as const, product: "Maggi", delta: 200 };
+    expect(await provider.reason({ text: "hello", pending })).toMatchObject({ kind: "unsupported" });
+    expect(await provider.reason({ text: "maybe yes", pending })).toMatchObject({ kind: "clarify" });
+  });
+  it("parses the actual short Prisma QA transcript without inventing another item", async () => {
+    expect(await provider.reason({ text: "मैगी के 20 पैकेट ऐड कर दो" })).toMatchObject({
+      kind: "tool_call", tool: { intent: "inventory.adjust", arguments: { product: "Maggi", delta: 20 } },
+    });
+  });
   it("lets a new sales request interrupt an unanswered Bread price question", async () => {
     const bread = await provider.reason({ text: "50 packet of Bread add kro new inventory h ye" });
     expect(bread).toMatchObject({ kind: "clarify", pending: { kind: "product-create-price", product: "Bread", openingStock: 50 } });

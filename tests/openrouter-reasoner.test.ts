@@ -48,16 +48,55 @@ describe("OpenRouter reasoner trust boundary", () => {
 
   it("validates new khata, repayment and shopping-list tools", async () => {
     const scenarios = [
-      ["khata_openAccount", { customer: "Nandini", amountRupees: 100 }, "khata.openAccount"],
-      ["khata_addEntry", { customer: "Nandini", type: "received", amountRupees: 50 }, "khata.addEntry"],
-      ["inventory_checkList", { items: [{ product: "Maggi", quantity: 2 }] }, "inventory.checkList"],
+      ["khata_openAccount", { customer: "Nandini", amountRupees: 100 }, "khata.openAccount", "Open Nandini's khata with 100 rupees"],
+      ["khata_addEntry", { customer: "Nandini", type: "received", amountRupees: 50 }, "khata.addEntry", "Nandini paid 50 rupees"],
+      ["inventory_checkList", { items: [{ product: "Maggi", quantity: 2 }] }, "inventory.checkList", "Check shopping list Maggi 2"],
     ] as const;
-    for (const [name, args, intent] of scenarios) {
+    for (const [name, args, intent, text] of scenarios) {
       const request: typeof fetch = async () => completion(name, args);
-      await expect(new OpenRouterReasoner("test-key", model, request).reason({ text: "Merchant request" })).resolves.toMatchObject({
+      await expect(new OpenRouterReasoner("test-key", model, request).reason({ text })).resolves.toMatchObject({
         kind: "tool_call", tool: { intent, arguments: args },
       });
     }
+  });
+
+  it.each(["hi", "hii", "hello", "Hello!", "namaste"])("never sends greeting %s to a model or proposes a store action", async (text) => {
+    const request: typeof fetch = async () => { throw new Error("Greeting must not reach OpenRouter"); };
+    await expect(new OpenRouterReasoner("test-key", model, request).reason({ text })).resolves.toMatchObject({ kind: "unsupported" });
+  });
+
+  it("asks to clarify an ambiguous transcript instead of accepting invented stock", async () => {
+    const request: typeof fetch = async () => completion("inventory_adjust", { product: "Maggi", delta: 200 });
+    await expect(new OpenRouterReasoner("test-key", model, request).reason({ text: "add maybe Maggi" }))
+      .resolves.toMatchObject({ kind: "clarify" });
+  });
+
+  it("rejects invented product and quantity even when the utterance mentions inventory", async () => {
+    const request: typeof fetch = async () => completion("inventory_adjust", { product: "Maggi", delta: 200 });
+    await expect(new OpenRouterReasoner("test-key", model, request).reason({ text: "please add an item to inventory" }))
+      .resolves.toMatchObject({ kind: "clarify" });
+  });
+
+  it("clarifies a model-proposed mutation whose direction conflicts with the merchant", async () => {
+    const stockRequest: typeof fetch = async () => completion("inventory_adjust", { product: "Maggi", delta: -20 });
+    await expect(new OpenRouterReasoner("test-key", model, stockRequest).reason({ text: "Add 20 Maggi packets" }))
+      .resolves.toMatchObject({ kind: "clarify" });
+    const ledgerRequest: typeof fetch = async () => completion("khata_addEntry", { customer: "Nandini", type: "gave", amountRupees: 50 });
+    await expect(new OpenRouterReasoner("test-key", model, ledgerRequest).reason({ text: "Nandini paid 50 rupees" }))
+      .resolves.toMatchObject({ kind: "clarify" });
+  });
+
+  it("clarifies uncertain Prisma-style text before any provider call", async () => {
+    const request: typeof fetch = async () => { throw new Error("Unclear transcript must not reach the model"); };
+    await expect(new OpenRouterReasoner("test-key", model, request).reason({ text: "maybe Maggi ke 200 packet add kar do" }))
+      .resolves.toMatchObject({ kind: "clarify" });
+  });
+
+  it("never saves a model-invented pending customer name", async () => {
+    const request: typeof fetch = async () => completion("clarify_openAccount", { customer: "Maggi" });
+    const result = await new OpenRouterReasoner("test-key", model, request).reason({ text: "open an udhaar khata" });
+    expect(result.kind).toBe("clarify");
+    expect("pending" in result).toBe(false);
   });
 
   it("asks for an opening amount and completes the follow-up without a second model call", async () => {

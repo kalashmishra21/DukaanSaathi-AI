@@ -2,6 +2,11 @@
 .stage12-landing {
   overflow-x: clip;
 }
+/* Defer below-fold layout work; the hero and its readable fallback paint first. */
+.stage12-landing :is(.story, .studio, .landing-demo-section, .closing) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 760px;
+}
 .stage12-landing .site-header.landing-header {
   height: 78px;
   padding-inline: max(48px, calc((100vw - 1456px) / 2));

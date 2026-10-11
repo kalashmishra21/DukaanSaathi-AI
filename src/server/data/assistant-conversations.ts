@@ -35,13 +35,17 @@ export class AssistantConversationRepository {
   }
 
   async load(id: string) {
-    const { data: thread, error: threadError } = await this.context.client.from("assistant_conversations")
-      .select("id,title,pending,updated_at").eq("id", id).eq("shop_id", this.context.shop.id)
-      .eq("owner_id", this.context.userId).maybeSingle();
+    // Both reads are independently owner-scoped by RLS. Starting them together
+    // removes a Supabase round trip from every initial Assistant load.
+    const [{ data: thread, error: threadError }, { data: messages, error }] = await Promise.all([
+      this.context.client.from("assistant_conversations")
+        .select("id,title,pending,updated_at").eq("id", id).eq("shop_id", this.context.shop.id)
+        .eq("owner_id", this.context.userId).maybeSingle(),
+      this.context.client.from("assistant_messages")
+        .select("id,role,text,result,request_key,created_at").eq("conversation_id", id).eq("shop_id", this.context.shop.id)
+        .order("created_at").order("id").limit(300),
+    ]);
     if (threadError || !thread) throw new Error("Conversation not found in this shop.");
-    const { data: messages, error } = await this.context.client.from("assistant_messages")
-      .select("id,role,text,result,request_key,created_at").eq("conversation_id", id).eq("shop_id", this.context.shop.id)
-      .order("created_at").order("id").limit(300);
     if (error) throw new Error("Conversation messages are unavailable.");
     const safeMessages = z.array(messageSchema).parse(messages).map((message) => {
       const parsed = message.result === null ? null : assistantResponseSchema.safeParse(message.result);
