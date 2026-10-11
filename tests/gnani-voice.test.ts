@@ -48,4 +48,18 @@ describe("Gnani voice boundary without network calls", () => {
     const provider = new GnaniVoiceProvider("test-key", request);
     await expect(provider.transcribe({ audio: encodeWav([new Float32Array(8000)], 16000), mimeType: "audio/wav" })).rejects.toThrow("invalid transcript");
   });
+
+  it("surfaces a Prisma rate limit without fabricating a transcript", async () => {
+    const request: typeof fetch = async () => new Response(null, { status: 429, headers: { "retry-after": "3" } });
+    const provider = new GnaniVoiceProvider("test-key", request);
+    await expect(provider.transcribe({ audio: encodeWav([new Float32Array(8000)], 16000), mimeType: "audio/wav" }))
+      .rejects.toMatchObject({ provider: "Gnani Prisma", status: 429, retryAfter: "3" });
+  });
+
+  it("surfaces a Timbre failure without fabricating playable audio", async () => {
+    const request: typeof fetch = async () => Response.json({ success: false }, { status: 500 });
+    const provider = new GnaniVoiceProvider("test-key", request);
+    await expect(provider.synthesize("Namaste"))
+      .rejects.toMatchObject({ provider: "Gnani Timbre", status: 500 });
+  });
 });

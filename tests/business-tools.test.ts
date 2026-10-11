@@ -141,6 +141,13 @@ describe("business boundary", () => {
     expect(result).toMatchObject({ ok: true, data: { customer: "Rahul Sharma", balance: 260 } });
   });
 
+  it("does not substitute an ASR-misheard customer name with someone else's ledger", async () => {
+    const executor = new BusinessToolExecutor(fakeRepository().repository);
+    const result = await executor.execute({ intent: "khata.getBalance", arguments: { customer: "Shyama ji" } });
+    expect(result.ok).toBe(false);
+    expect(describeToolResult(result).title).toBe("Action not completed");
+  });
+
   it("saves a khata entry before calculating the new balance", async () => {
     const executor = new BusinessToolExecutor(fakeRepository().repository);
     const result = await executor.execute({ intent: "khata.addEntry", arguments: { customer: "Sharma ji", type: "gave", amountRupees: 100 } });
