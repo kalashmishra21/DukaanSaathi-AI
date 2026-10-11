@@ -4,21 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, CircleUserRound, LogOut, Monitor, Moon, Sun, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { appearanceEvent, applyAppearance, readAppearance, saveAppearance, type Appearance } from "@/lib/appearance";
 
-type Appearance = "light" | "dark" | "system";
 type Profile = { displayName: string; email: string; shop: { id: string; name: string; currency: string; demo: boolean } | null };
-
-function preference(): Appearance {
-  try {
-    const value = localStorage.getItem("dukaansaathi-theme");
-    return value === "light" || value === "dark" ? value : "system";
-  } catch { return "system"; }
-}
-
-function applyAppearance(next: Appearance) {
-  document.documentElement.dataset.theme = next === "system"
-    ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : next;
-}
 
 export function ProfileControl() {
   const router = useRouter();
@@ -48,11 +36,14 @@ export function ProfileControl() {
   }, []);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => { setAppearance(preference()); void loadProfile(); });
+    const syncAppearance = () => setAppearance(readAppearance());
+    const frame = requestAnimationFrame(() => { syncAppearance(); void loadProfile(); });
     const media = matchMedia("(prefers-color-scheme: dark)");
-    const sync = () => { if (preference() === "system") document.documentElement.dataset.theme = media.matches ? "dark" : "light"; };
+    const sync = () => { if (readAppearance() === "system") applyAppearance("system"); };
     media.addEventListener("change", sync);
-    return () => { cancelAnimationFrame(frame); media.removeEventListener("change", sync); };
+    window.addEventListener(appearanceEvent, syncAppearance);
+    window.addEventListener("storage", syncAppearance);
+    return () => { cancelAnimationFrame(frame); media.removeEventListener("change", sync); window.removeEventListener(appearanceEvent, syncAppearance); window.removeEventListener("storage", syncAppearance); };
   }, [loadProfile]);
 
   useEffect(() => {
@@ -67,8 +58,7 @@ export function ProfileControl() {
   }, [open]);
 
   function chooseAppearance(next: Appearance) {
-    try { localStorage.setItem("dukaansaathi-theme", next); } catch { /* Session appearance still updates. */ }
-    applyAppearance(next);
+    saveAppearance(next);
     setAppearance(next);
   }
 

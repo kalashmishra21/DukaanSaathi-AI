@@ -7,6 +7,7 @@ import { AudioLines, Menu, MessageCircle, PanelLeftClose, PanelLeftOpen, X } fro
 import { BrandLockup, BrandMark } from "./brand";
 import { WorkspaceNav } from "./workspace-nav";
 import { ProfileControl } from "./profile-control";
+import { AppearanceControl } from "./appearance-control";
 
 const AssistantWorkspace = dynamic(() => import("@/components/assistant/assistant-workspace").then((module) => module.AssistantWorkspace),
   { loading: () => <div className="saathi-drawer-loading" role="status">Opening Saathi…</div> });
@@ -76,7 +77,7 @@ export function WorkspaceChrome({ children, shopName, status, description, demo,
     <div className="workspace-content">
       <header className="workspace-topbar">
         <div className="workspace-topbar-location"><button type="button" className="mobile-menu-button" aria-label="Open navigation" onClick={() => mobile.current?.showModal()}><Menu size={21} /></button><span className="workspace-mobile-symbol"><BrandMark size={26} /></span><span className="workspace-topbar-mark" /><span className="workspace-topbar-shop">{shopName}</span><span className="workspace-topbar-separator">/</span><span className="workspace-topbar-secondary">{demo ? "DEMO STORE" : "STORE WORKSPACE"}</span></div>
-        <ProfileControl />
+        <div className="workspace-topbar-controls"><AppearanceControl placement="workspace" /><ProfileControl /></div>
       </header>
       <main className="workspace-main" hidden={expanded}>{children}</main>
       {(assistantLoaded || expanded) && <div ref={drawer} className={expanded ? "shared-assistant-full" : "shared-assistant-drawer"} hidden={!assistantVisible}
