@@ -427,6 +427,16 @@ export function completePending(rawPending: unknown, text: string): ReasoningRes
   return confirmPending(parsed.data, text);
 }
 
+function looksLikeNameAnswer(text: string): boolean {
+  const words = text.trim().split(/\s+/u);
+  return words.length <= 5
+    && /\p{L}/u.test(text)
+    && /^[\p{L}\p{N}][\p{L}\p{M}\p{N}'’&.\-/]*(?:\s+[\p{L}\p{N}][\p{L}\p{M}\p{N}'’&.\-/]*){0,4}$/u.test(text)
+    && !/^(?:what|how|where|when|why|who|tell|show|please|can|could|would|is|are|do|does|aaj|today|order|stock|inventory|khata|udhaar|add|create|cancel)\b/iu.test(text)
+    && !/\b(?:me|you|joke|time|please|batao|dikhao|karo|kar|do|de|diya|hai|rupaye|rupees?|rs)\b/iu.test(text)
+    && !/(?:आज|बिक्री|स्टॉक|उधार|बताओ|दिखाओ|ऑर्डर)/u.test(text);
+}
+
 // A pending answer only owns the next turn when it looks like an answer to that
 // particular question. A fresh merchant command must be allowed to interrupt it.
 export function shouldContinuePending(rawPending: unknown, rawText: string): boolean {
@@ -446,5 +456,13 @@ export function shouldContinuePending(rawPending: unknown, rawText: string): boo
   }
   if (["product-existing-confirm", "khata-create-confirm", "order-transition-confirm"].includes(parsed.data.kind)) return isYes(rawText);
   if (parsed.data.kind === "product-action-choice") return /^(?:new|naya|nayi|new product|create|naya product|existing|old|already exists|stock|existing stock)$/iu.test(text);
-  return text.length > 0 && text.split(/\s+/u).length <= 5;
+  if (parsed.data.kind === "product-create-unit") return /^(?:packets?|pieces?|units?|bottles?|boxes?|kg|litres?|liters?)$/iu.test(text);
+  if (parsed.data.kind === "order-transition-select") {
+    const query = text.replace(/^(?:order|po|#)\s*/iu, "").trim();
+    if (!query) return false;
+    return parsed.data.candidates.some((candidate) => candidate.id.toLocaleLowerCase().startsWith(query)
+      || candidate.label.toLocaleLowerCase("en-IN") === query);
+  }
+  if (["customer-name", "supplier-name", "order-supplier"].includes(parsed.data.kind)) return looksLikeNameAnswer(text);
+  return false;
 }

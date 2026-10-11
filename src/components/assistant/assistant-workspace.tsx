@@ -65,6 +65,7 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const activeThread = useRef<string | null>(null);
+  const initialLoad = useRef<Promise<void> | null>(null);
   const [inactiveDrafts, setInactiveDrafts] = useState<number[]>([]);
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceLanguage, setVoiceLanguage] = useState<"hi-IN" | "en-IN">("hi-IN");
@@ -175,8 +176,11 @@ export function AssistantWorkspace({ connected, providerMode, reasonerMode, voic
   useEffect(() => {
     if (!connected) return;
     let cancelled = false;
+    // React may replay this effect in development. Reuse the same request so a
+    // fresh shop gets exactly one first conversation.
+    initialLoad.current ??= refreshConversations();
     const initialize = async () => {
-      try { await refreshConversations(); if (!cancelled) setHistoryError(""); }
+      try { await initialLoad.current; if (!cancelled) setHistoryError(""); }
       catch (error) { if (!cancelled) setHistoryError(error instanceof Error ? error.message : "Conversation history is unavailable."); }
       finally { if (!cancelled) setHistoryLoading(false); }
     };

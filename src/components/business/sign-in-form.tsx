@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import type { ZodIssue } from "zod";
@@ -10,6 +10,9 @@ import { signInSchema, signUpSchema } from "@/lib/auth/validation";
 type Mode = "signin" | "signup";
 type Field = "fullName" | "email" | "password" | "confirmPassword";
 type FieldErrors = Partial<Record<Field, string>>;
+const subscribeHydration = () => () => {};
+const clientHydrated = () => true;
+const serverHydrated = () => false;
 
 function fieldErrors(issues: ZodIssue[]): FieldErrors {
   const errors: FieldErrors = {};
@@ -32,6 +35,7 @@ function authMessage(reason: unknown): string {
 export function SignInForm({ initialMode = "signin" }: { initialMode?: Mode }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>(initialMode);
+  const hydrated = useSyncExternalStore(subscribeHydration, clientHydrated, serverHydrated);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -128,7 +132,7 @@ export function SignInForm({ initialMode = "signin" }: { initialMode?: Mode }) {
       <button type="button" aria-pressed={mode === "signin"} disabled={busy} onClick={() => switchMode("signin")}>Sign in</button>
       <button type="button" aria-pressed={mode === "signup"} disabled={busy} onClick={() => switchMode("signup")}>Create account</button>
     </div>
-    <form key={mode} className="business-form auth-form" noValidate onSubmit={(event) => void submit(event)}>
+    <form key={mode} className="business-form auth-form" method="post" noValidate onSubmit={(event) => void submit(event)}>
       {mode === "signup" && field("fullName", "Full name", <input id="auth-fullName" name="fullName" type="text" autoComplete="name"
         aria-invalid={Boolean(errors.fullName)} aria-describedby={errors.fullName ? "auth-fullName-error" : undefined}
         onInput={() => clearField("fullName")} />)}
@@ -137,7 +141,7 @@ export function SignInForm({ initialMode = "signin" }: { initialMode?: Mode }) {
         onInput={() => clearField("email")} />)}
       {passwordField("password", "Password")}
       {mode === "signup" && passwordField("confirmPassword", "Confirm password")}
-      <button className="button button-copper" disabled={busy} type="submit">{busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}</button>
+      <button className="button button-copper" disabled={busy || !hydrated} type="submit">{busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}</button>
     </form>
     {notice && <p className="form-notice" role="status">{notice}</p>}
     {error && <p className="form-error" role="alert">{error}</p>}
